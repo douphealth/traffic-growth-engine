@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { mockSites } from "@/lib/mock-data";
 import { Plus, ExternalLink, Activity } from "lucide-react";
 
-export const Route = createFileRoute("/_authenticated/sites")({
+export const Route = createFileRoute("/_authenticated/sites/")({
   component: SitesPage,
 });
 
