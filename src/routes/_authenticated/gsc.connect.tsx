@@ -402,3 +402,12 @@ function PropertyRow({
     </div>
   );
 }
+
+function DiagRow({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-2 border-b border-border/40 py-1">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={ok === true ? "font-medium text-success" : ok === false ? "font-medium text-destructive" : "font-medium"}>{value}</span>
+    </div>
+  );
+}
