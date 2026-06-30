@@ -84,7 +84,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           "AutoTraffic AI is a data-driven WordPress growth engine for SEO, GEO, AEO, AI visibility, internal linking, schema, and affiliate monetization — with human-in-the-loop approval and rollback.",
       },
       { name: "author", content: "AutoTraffic AI" },
-      { property: "og:title", content: "AutoTraffic AI" },
+      { property: "og:title", content: "AutoTraffic AI — Autonomous WordPress organic-growth OS" },
       {
         property: "og:description",
         content:
@@ -92,6 +92,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      { name: "twitter:title", content: "AutoTraffic AI — Autonomous WordPress organic-growth OS" },
+      { name: "description", content: "AutoTraffic AI is an autonomous WordPress operating system for organic growth." },
+      { property: "og:description", content: "AutoTraffic AI is an autonomous WordPress operating system for organic growth." },
+      { name: "twitter:description", content: "AutoTraffic AI is an autonomous WordPress operating system for organic growth." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/32d56403-112d-4952-a863-5638f2505232/id-preview-c705b034--d726a316-0403-48a5-ad9d-d8b6b7e51e8b.lovable.app-1782811958873.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/32d56403-112d-4952-a863-5638f2505232/id-preview-c705b034--d726a316-0403-48a5-ad9d-d8b6b7e51e8b.lovable.app-1782811958873.png" },
     ],
     links: [
       {
