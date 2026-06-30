@@ -7,12 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ShieldCheck } from "lucide-react";
+import { useDemoMode } from "@/hooks/use-demo-mode";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   component: SettingsPage,
 });
 
 function SettingsPage() {
+  const [demo, setDemo] = useDemoMode();
   return (
     <>
       <PageHeader
@@ -29,6 +31,26 @@ function SettingsPage() {
             stored encrypted, server-side only, and never exposed to the frontend.
           </AlertDescription>
         </Alert>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Demo mode</CardTitle>
+            <CardDescription>
+              Show mock fixtures on screens that don't have real data yet (Content Pipeline, Validation, Publishing, etc.).
+              Dashboard, Site Inventory, and Opportunity Board always use real data when present.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between rounded-md border border-border p-3">
+              <div>
+                <div className="text-sm font-medium">Demo mode is {demo ? "ON" : "OFF"}</div>
+                <p className="text-xs text-muted-foreground">A warning banner appears globally while ON.</p>
+              </div>
+              <Switch checked={demo} onCheckedChange={setDemo} />
+            </div>
+          </CardContent>
+        </Card>
+
 
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
