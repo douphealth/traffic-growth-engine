@@ -1,14 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Outlet } from "@tanstack/react-router";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ShieldCheck, Lock } from "lucide-react";
+import { ShieldCheck, Lock, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { connectWordpressSite } from "@/lib/sites.functions";
 
 export const Route = createFileRoute("/_authenticated/sites/connect")({
   component: ConnectSitePage,
@@ -17,30 +17,51 @@ export const Route = createFileRoute("/_authenticated/sites/connect")({
 function ConnectSitePage() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    base_url: "",
+    wp_username: "",
+    wp_app_password: "",
+    sitemap_url: "",
+    gsc_property: "",
+    ga4_property_id: "",
+  });
 
-  function onSubmit(e: React.FormEvent) {
+  function set<K extends keyof typeof form>(k: K, v: string) {
+    setForm((f) => ({ ...f, [k]: v }));
+  }
+
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
-    setTimeout(() => {
-      setSubmitting(false);
-      toast.success("Site queued for scan (mock). No live WordPress call was made.");
+    try {
+      const res = await connectWordpressSite({ data: form });
+      if (!res.ok) {
+        toast.error(res.message ?? "Connection failed");
+        return;
+      }
+      toast.success(`Connected as ${res.wp_user}. Ready to import inventory.`);
       navigate({ to: "/sites" });
-    }, 700);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Connection failed");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
     <>
       <PageHeader
         title="Connect a WordPress site"
-        description="WordPress credentials are stored server-side, encrypted at rest, and never exposed to the browser. Live updates require explicit approval and store a rollback snapshot."
+        description="WordPress credentials are validated live, stored server-side, encrypted at rest, and never exposed to the browser."
       />
       <PageBody>
         <Alert>
           <Lock className="h-4 w-4" />
-          <AlertTitle>Mock connector — no network call</AlertTitle>
+          <AlertTitle>Real connection — credentials encrypted</AlertTitle>
           <AlertDescription>
-            Phase 1 records the connection intent. WordPress, Google Search Console, GA4, and
-            DataForSEO calls will activate once credentials are added securely on the server.
+            We test <code>/wp-json/</code> and authenticate against <code>/wp/v2/users/me</code> before saving.
+            The Application Password is stored using pgcrypto and only readable by the service role.
           </AlertDescription>
         </Alert>
 
@@ -48,27 +69,25 @@ function ConnectSitePage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">WordPress REST API</CardTitle>
-              <CardDescription>Use a dedicated Application Password — never an admin password.</CardDescription>
+              <CardDescription>Create a dedicated Application Password — never an admin password.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Field id="name" label="Site name" placeholder="My Headphone Reviews" required />
-              <Field id="url" label="Site URL" placeholder="https://example.com" type="url" required />
-              <Field id="wp_user" label="WordPress username" placeholder="seo-bot" required />
-              <Field id="wp_app_password" label="Application Password" placeholder="xxxx xxxx xxxx xxxx xxxx xxxx" type="password" required helper="Stored encrypted, server-only. Never sent to the browser after save." />
+              <Field id="name" label="Site name" value={form.name} onChange={(v) => set("name", v)} required />
+              <Field id="base_url" label="Site URL" placeholder="https://example.com" type="url" value={form.base_url} onChange={(v) => set("base_url", v)} required />
+              <Field id="wp_username" label="WordPress username" value={form.wp_username} onChange={(v) => set("wp_username", v)} required />
+              <Field id="wp_app_password" label="Application Password" type="password" value={form.wp_app_password} onChange={(v) => set("wp_app_password", v)} required helper="Stored encrypted server-side. Never sent to the browser after save." />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Analytics & SEO sources</CardTitle>
-              <CardDescription>OAuth/Service-account flows wire up later. You can connect them after the first scan.</CardDescription>
+              <CardDescription>Optional now — required to import GSC data and score opportunities accurately.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Field id="gsc" label="Google Search Console property" placeholder="sc-domain:example.com" />
-              <Field id="ga4" label="GA4 property ID" placeholder="properties/123456789" />
-              <Field id="sitemap" label="Sitemap URL" placeholder="https://example.com/sitemap_index.xml" />
-              <Field id="robots" label="robots.txt URL" placeholder="https://example.com/robots.txt" />
-              <Field id="llms" label="llms.txt URL (optional)" placeholder="https://example.com/llms.txt" />
+              <Field id="gsc_property" label="Google Search Console property" placeholder="sc-domain:example.com" value={form.gsc_property} onChange={(v) => set("gsc_property", v)} />
+              <Field id="ga4_property_id" label="GA4 property ID" placeholder="properties/123456789" value={form.ga4_property_id} onChange={(v) => set("ga4_property_id", v)} />
+              <Field id="sitemap_url" label="Sitemap URL" placeholder="https://example.com/sitemap_index.xml" value={form.sitemap_url} onChange={(v) => set("sitemap_url", v)} />
             </CardContent>
           </Card>
 
@@ -83,7 +102,7 @@ function ConnectSitePage() {
             <CardContent className="grid gap-3 sm:grid-cols-2 text-sm">
               <Bullet>Live WordPress updates require explicit approval per change.</Bullet>
               <Bullet>Every update saves a full rollback snapshot before writing.</Bullet>
-              <Bullet>Validation must pass — broken links, lost images, schema-without-evidence are blocked.</Bullet>
+              <Bullet>Validation blocks broken links, lost images, and schema without evidence.</Bullet>
               <Bullet>AI content is never mass-published. Drafts only until you approve.</Bullet>
             </CardContent>
           </Card>
@@ -93,12 +112,11 @@ function ConnectSitePage() {
               Cancel
             </Button>
             <Button type="submit" disabled={submitting}>
-              {submitting ? "Saving…" : "Save & queue scan"}
+              {submitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+              {submitting ? "Validating & saving…" : "Test & connect"}
             </Button>
           </div>
         </form>
-
-        <Outlet />
       </PageBody>
     </>
   );
@@ -108,16 +126,20 @@ function Field({
   id,
   label,
   helper,
+  value,
+  onChange,
   ...rest
 }: {
   id: string;
   label: string;
   helper?: string;
-} & React.InputHTMLAttributes<HTMLInputElement>) {
+  value: string;
+  onChange: (v: string) => void;
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange">) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id}>{label}</Label>
-      <Input id={id} {...rest} />
+      <Input id={id} value={value} onChange={(e) => onChange(e.target.value)} {...rest} />
       {helper && <p className="text-[11px] text-muted-foreground">{helper}</p>}
     </div>
   );
