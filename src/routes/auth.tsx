@@ -33,16 +33,24 @@ function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
 
+  function safeRedirect() {
+    if (redirectTo?.startsWith("/")) {
+      window.location.assign(redirectTo);
+      return;
+    }
+    navigate({ to: "/dashboard" });
+  }
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) {
-        navigate({ to: redirectTo ?? "/dashboard" });
+        safeRedirect();
       } else {
         setChecking(false);
       }
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (session) navigate({ to: redirectTo ?? "/dashboard" });
+      if (session) safeRedirect();
     });
     return () => sub.subscription.unsubscribe();
   }, [navigate, redirectTo]);
