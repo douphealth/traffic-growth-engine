@@ -14,7 +14,7 @@ import {
   CheckCircle2,
   ChevronDown,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { connectWordpressSite } from "@/lib/sites.functions";
@@ -32,6 +32,8 @@ export const Route = createFileRoute("/_authenticated/sites/connect")({
 function ConnectSitePage() {
   const navigate = useNavigate();
   const [showWp, setShowWp] = useState(false);
+  const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  const justConnected = params.get("gsc") === "connected";
 
   const connQ = useQuery({
     queryKey: ["google-connection"],
@@ -44,6 +46,16 @@ function ConnectSitePage() {
     onSuccess: (r) => {
       if (!r.ok) {
         toast.error(r.reason);
+        return;
+      }
+      if (r.mode === "connector") {
+        toast.success(
+          r.created + r.linked === 0
+            ? `Synced ${r.properties} Search Console propert${r.properties === 1 ? "y" : "ies"}.`
+            : `Linked ${r.linked} propert${r.linked === 1 ? "y" : "ies"}` +
+                (r.created > 0 ? ` · created ${r.created} site${r.created === 1 ? "" : "s"}` : ""),
+        );
+        navigate({ to: "/sites" });
         return;
       }
       window.location.href = r.url;
@@ -76,6 +88,20 @@ function ConnectSitePage() {
   });
 
   const isConnected = !!connQ.data;
+
+  useEffect(() => {
+    if (!justConnected) return;
+    const properties = params.get("properties");
+    const created = params.get("created");
+    const linked = params.get("linked");
+    toast.success(
+      properties
+        ? `Google connected — synced ${properties} propert${properties === "1" ? "y" : "ies"}, created ${created ?? "0"} site${created === "1" ? "" : "s"}, linked ${linked ?? "0"}.`
+        : "Google connected — your Search Console properties are syncing now.",
+    );
+    navigate({ to: "/sites" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [justConnected]);
 
   return (
     <>

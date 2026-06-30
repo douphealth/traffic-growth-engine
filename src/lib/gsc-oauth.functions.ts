@@ -2,6 +2,232 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
+type GscPropertyRow = {
+  id: string;
+  site_url: string;
+  org_id: string;
+  permission_level?: string | null;
+  selected?: boolean;
+  last_seen_at?: string;
+};
+
+type GscApiEntry = { siteUrl: string; permissionLevel?: string };
+
+const GSC_GATEWAY_BASE = "https://connector-gateway.lovable.dev/google_search_console";
+
+function hasGscGatewayConnection(): boolean {
+  return Boolean(process.env.LOVABLE_API_KEY && process.env.GOOGLE_SEARCH_CONSOLE_API_KEY);
+}
+
+async function callGscGateway(path: string, init?: RequestInit): Promise<Response> {
+  const lovableKey = process.env.LOVABLE_API_KEY;
+  const connectionKey = process.env.GOOGLE_SEARCH_CONSOLE_API_KEY;
+  if (!lovableKey || !connectionKey) {
+    throw new Error("Google Search Console connector is not linked to this app.");
+  }
+
+  const headers = new Headers(init?.headers);
+  headers.set("Authorization", `Bearer ${lovableKey}`);
+  headers.set("X-Connection-Api-Key", connectionKey);
+
+  const res = await fetch(`${GSC_GATEWAY_BASE}${path}`, { ...init, headers });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Search Console connector failed: ${res.status} ${body.slice(0, 300)}`);
+  }
+  return res;
+}
+
+function siteIdentityFromProperty(siteUrl: string): { host: string; baseUrl: string; name: string } | null {
+  if (siteUrl.startsWith("sc-domain:")) {
+    const host = siteUrl.slice("sc-domain:".length).trim().replace(/^\*\./, "");
+    if (!host) return null;
+    return { host, baseUrl: `https://${host}`, name: host };
+  }
+
+  try {
+    const u = new URL(siteUrl);
+    const pathSuffix = u.pathname && u.pathname !== "/" ? u.pathname.replace(/\/$/, "") : "";
+    return {
+      host: u.hostname,
+      baseUrl: `${u.protocol}//${u.host}${pathSuffix}`,
+      name: pathSuffix ? `${u.hostname}${pathSuffix}` : u.hostname,
+    };
+  } catch {
+    const cleaned = siteUrl.trim();
+    return cleaned ? { host: cleaned, baseUrl: cleaned, name: cleaned } : null;
+  }
+}
+
+async function getFirstOrgForUser(supabase: any, userId: string) {
+  const { data: member } = await supabase
+    .from("organization_members")
+    .select("org_id")
+    .eq("user_id", userId)
+    .limit(1)
+    .maybeSingle();
+  return member?.org_id as string | undefined;
+}
+
+async function ensureConnectorConnection(supabaseAdmin: any, orgId: string, userId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("google_connections")
+    .upsert(
+      {
+        org_id: orgId,
+        user_id: userId,
+        google_email: "Google Search Console connector",
+        scopes: ["https://www.googleapis.com/auth/webmasters.readonly"],
+        status: "connector",
+        last_refreshed_at: new Date().toISOString(),
+      },
+      { onConflict: "org_id,user_id" },
+    )
+    .select("id, org_id, google_email, status")
+    .single();
+
+  if (error || !data) throw new Error(error?.message ?? "Unable to initialize GSC connector");
+  return data as { id: string; org_id: string; google_email: string | null; status: string };
+}
+
+async function syncGatewayProperties(supabaseAdmin: any, orgId: string, userId: string) {
+  const connection = await ensureConnectorConnection(supabaseAdmin, orgId, userId);
+  const res = await callGscGateway("/webmasters/v3/sites");
+  const json = (await res.json()) as { siteEntry?: GscApiEntry[] };
+  const entries = json.siteEntry ?? [];
+
+  if (entries.length) {
+    const rows = entries.map((entry) => ({
+      org_id: orgId,
+      connection_id: connection.id,
+      site_url: entry.siteUrl,
+      permission_level: entry.permissionLevel ?? null,
+      last_seen_at: new Date().toISOString(),
+    }));
+    const { error } = await supabaseAdmin
+      .from("gsc_properties")
+      .upsert(rows as never, { onConflict: "org_id,site_url" });
+    if (error) throw new Error(error.message);
+  }
+
+  const { data: properties, error: propErr } = await supabaseAdmin
+    .from("gsc_properties")
+    .select("id, site_url, org_id, permission_level, selected, last_seen_at")
+    .eq("connection_id", connection.id)
+    .order("site_url");
+  if (propErr) throw new Error(propErr.message);
+
+  return { connection, properties: (properties ?? []) as GscPropertyRow[] };
+}
+
+async function autoCreateAndLinkSites(
+  supabaseAdmin: any,
+  orgId: string,
+  userId: string,
+  connectionId: string,
+  properties: GscPropertyRow[],
+) {
+  const propIds = properties.map((p) => p.id);
+  const { data: existingMaps } = propIds.length
+    ? await supabaseAdmin
+        .from("site_gsc_connections")
+        .select("gsc_property_id, site_id")
+        .in("gsc_property_id", propIds)
+    : { data: [] };
+  const linkedPropIds = new Set((existingMaps ?? []).map((m: any) => m.gsc_property_id));
+
+  let created = 0;
+  let linked = 0;
+
+  for (const prop of properties) {
+    if (linkedPropIds.has(prop.id)) continue;
+
+    const identity = siteIdentityFromProperty(prop.site_url);
+    if (!identity) continue;
+
+    const { data: exactSite } = await supabaseAdmin
+      .from("sites")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("gsc_property", prop.site_url)
+      .maybeSingle();
+
+    let siteId = (exactSite as { id: string } | null)?.id;
+
+    if (!siteId) {
+      const { data: candidates } = await supabaseAdmin
+        .from("sites")
+        .select("id, gsc_property")
+        .eq("org_id", orgId)
+        .eq("base_url", identity.baseUrl)
+        .limit(10);
+      const reusable = (candidates ?? []).find((site: any) => !site.gsc_property);
+      siteId = reusable?.id;
+
+      if (siteId) {
+        const { error: updateErr } = await supabaseAdmin
+          .from("sites")
+          .update({ gsc_property: prop.site_url, status: "connected" })
+          .eq("id", siteId);
+        if (updateErr) throw new Error(updateErr.message);
+      }
+    }
+
+    if (!siteId) {
+      const { data: inserted, error: insertErr } = await supabaseAdmin
+        .from("sites")
+        .insert({
+          org_id: orgId,
+          name: identity.name,
+          base_url: identity.baseUrl,
+          status: "connected",
+          gsc_property: prop.site_url,
+        } as never)
+        .select("id")
+        .single();
+      if (insertErr || !inserted) throw new Error(insertErr?.message ?? "Unable to create site");
+      siteId = (inserted as { id: string }).id;
+      created++;
+    }
+
+    const { error: mapErr } = await supabaseAdmin.from("site_gsc_connections").upsert(
+      {
+        site_id: siteId,
+        gsc_property_id: prop.id,
+        connected_at: new Date().toISOString(),
+      } as never,
+      { onConflict: "site_id" },
+    );
+    if (mapErr) throw new Error(mapErr.message);
+
+    await supabaseAdmin.from("gsc_properties").update({ selected: true }).eq("id", prop.id);
+    linked++;
+  }
+
+  await supabaseAdmin.from("audit_logs").insert({
+    org_id: orgId,
+    user_id: userId,
+    action: "gsc.connector_auto_link",
+    entity_type: "google_connection",
+    entity_id: connectionId,
+    after: { created, linked, properties: properties.length },
+  });
+
+  return { created, linked };
+}
+
+async function syncAndAutoLinkFromGateway(supabaseAdmin: any, orgId: string, userId: string) {
+  const synced = await syncGatewayProperties(supabaseAdmin, orgId, userId);
+  const result = await autoCreateAndLinkSites(
+    supabaseAdmin,
+    orgId,
+    userId,
+    synced.connection.id,
+    synced.properties,
+  );
+  return { ...synced, ...result };
+}
+
 // ---------- Start OAuth ----------
 export const startGscOAuth = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -14,10 +240,37 @@ export const startGscOAuth = createServerFn({ method: "POST" })
       "@/lib/google-oauth.server"
     );
     if (!isGoogleOAuthConfigured()) {
+      if (hasGscGatewayConnection()) {
+        const orgId = await getFirstOrgForUser(supabase, userId);
+        if (!orgId) return { ok: false as const, reason: "No workspace found for user." };
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const synced = await syncAndAutoLinkFromGateway(supabaseAdmin, orgId, userId);
+        return {
+          ok: true as const,
+          mode: "connector" as const,
+          created: synced.created,
+          linked: synced.linked,
+          properties: synced.properties.length,
+        };
+      }
       return {
         ok: false as const,
         reason:
           "Google OAuth is not configured. Ask the workspace admin to add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REDIRECT_URI.",
+      };
+    }
+
+    if (hasGscGatewayConnection()) {
+      const orgId = await getFirstOrgForUser(supabase, userId);
+      if (!orgId) return { ok: false as const, reason: "No workspace found for user." };
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const synced = await syncAndAutoLinkFromGateway(supabaseAdmin, orgId, userId);
+      return {
+        ok: true as const,
+        mode: "connector" as const,
+        created: synced.created,
+        linked: synced.linked,
+        properties: synced.properties.length,
       };
     }
 
@@ -31,6 +284,9 @@ export const startGscOAuth = createServerFn({ method: "POST" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const state = newState();
+    const { getRequestUrl } = await import("@tanstack/react-start/server");
+    const requestUrl = getRequestUrl({ xForwardedHost: true, xForwardedProto: true });
+    const redirectUri = `${requestUrl.origin}/api/public/gsc/oauth/callback`;
     const { error } = await supabaseAdmin.from("google_oauth_states").insert({
       user_id: userId,
       org_id: member.org_id,
@@ -39,7 +295,7 @@ export const startGscOAuth = createServerFn({ method: "POST" })
     });
     if (error) throw new Error(error.message);
 
-    return { ok: true as const, url: buildConsentUrl(state) };
+    return { ok: true as const, mode: "oauth" as const, url: buildConsentUrl(state, redirectUri) };
   });
 
 // ---------- List GSC properties ----------
@@ -50,25 +306,42 @@ export const listGscProperties = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { data: conn } = await supabase
+    let { data: conn } = await supabase
       .from("google_connections")
       .select("id, org_id, google_email, status")
       .eq("user_id", userId)
       .maybeSingle();
-    if (!conn) return { ok: false as const, reason: "not_connected" };
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    if (!conn && hasGscGatewayConnection()) {
+      const orgId = await getFirstOrgForUser(supabase, userId);
+      if (!orgId) return { ok: false as const, reason: "No workspace found for user." };
+      await syncAndAutoLinkFromGateway(supabaseAdmin, orgId, userId);
+      const { data: refreshedConn } = await supabase
+        .from("google_connections")
+        .select("id, org_id, google_email, status")
+        .eq("user_id", userId)
+        .maybeSingle();
+      conn = refreshedConn;
+    }
+
+    if (!conn) return { ok: false as const, reason: "not_connected" };
+
     const { getFreshAccessToken } = await import("@/lib/google-tokens.server");
 
     if (data.refresh !== false) {
-      const accessToken = await getFreshAccessToken(supabaseAdmin, conn.id);
-      const res = await fetch("https://www.googleapis.com/webmasters/v3/sites", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (!res.ok) {
-        const t = await res.text();
-        throw new Error(`Search Console list failed: ${res.status} ${t.slice(0, 200)}`);
-      }
+      if (conn.status === "connector" && hasGscGatewayConnection()) {
+        await syncAndAutoLinkFromGateway(supabaseAdmin, conn.org_id, userId);
+      } else {
+        const accessToken = await getFreshAccessToken(supabaseAdmin, conn.id);
+        const res = await fetch("https://www.googleapis.com/webmasters/v3/sites", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!res.ok) {
+          const t = await res.text();
+          throw new Error(`Search Console list failed: ${res.status} ${t.slice(0, 200)}`);
+        }
       const j = (await res.json()) as {
         siteEntry?: { siteUrl: string; permissionLevel?: string }[];
       };
@@ -85,6 +358,7 @@ export const listGscProperties = createServerFn({ method: "POST" })
           .from("gsc_properties")
           .upsert(rows as never, { onConflict: "org_id,site_url" });
         if (error) throw new Error(error.message);
+      }
       }
     }
 
@@ -120,7 +394,7 @@ export const connectGscPropertyToSite = createServerFn({ method: "POST" })
 
     const { data: site } = await supabase
       .from("sites")
-      .select("id, org_id")
+      .select("id, org_id, status")
       .eq("id", data.site_id)
       .maybeSingle();
     if (!site) throw new Error("Site not found");
@@ -165,7 +439,7 @@ export const disconnectGoogle = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const { data: conn } = await supabase
       .from("google_connections")
-      .select("id, org_id")
+      .select("id, org_id, status")
       .eq("user_id", userId)
       .maybeSingle();
     if (!conn) return { ok: true as const };
@@ -202,10 +476,16 @@ export const autoLinkGscProperties = createServerFn({ method: "POST" })
 
     const { data: conn } = await supabase
       .from("google_connections")
-      .select("id, org_id")
+      .select("id, org_id, status")
       .eq("user_id", userId)
       .maybeSingle();
     if (!conn) return { ok: false as const, reason: "not_connected" };
+
+    if (conn.status === "connector" && hasGscGatewayConnection()) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const synced = await syncAndAutoLinkFromGateway(supabaseAdmin, conn.org_id, userId);
+      return { ok: true as const, created: synced.created, linked: synced.linked };
+    }
 
     const { data: props } = await supabase
       .from("gsc_properties")
