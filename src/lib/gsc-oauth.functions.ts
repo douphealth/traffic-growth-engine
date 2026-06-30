@@ -328,12 +328,11 @@ export const listGscProperties = createServerFn({ method: "POST" })
 
     if (!conn) return { ok: false as const, reason: "not_connected" };
 
-    const { getFreshAccessToken } = await import("@/lib/google-tokens.server");
-
     if (data.refresh !== false) {
       if (conn.status === "connector" && hasGscGatewayConnection()) {
         await syncAndAutoLinkFromGateway(supabaseAdmin, conn.org_id, userId);
       } else {
+        const { getFreshAccessToken } = await import("@/lib/google-tokens.server");
         const accessToken = await getFreshAccessToken(supabaseAdmin, conn.id);
         const res = await fetch("https://www.googleapis.com/webmasters/v3/sites", {
           headers: { Authorization: `Bearer ${accessToken}` },
