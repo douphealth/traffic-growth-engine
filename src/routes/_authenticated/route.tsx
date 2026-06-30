@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect, useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/hooks/use-auth";
@@ -30,12 +30,13 @@ export const Route = createFileRoute("/_authenticated")({
 
 function AuthenticatedLayout() {
   const { user, loading } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!loading && !user) {
-      throw redirect({ to: "/auth", search: { redirect: window.location.href } });
+      navigate({ to: "/auth", search: { redirect: window.location.href }, replace: true });
     }
-  }, [loading, user]);
+  }, [loading, navigate, user]);
 
   if (loading || !user) {
     return <AuthLoading />;
