@@ -1894,7 +1894,15 @@ export type Database = {
       }
       is_org_admin: { Args: { _org_id: string }; Returns: boolean }
       is_org_member: { Args: { _org_id: string }; Returns: boolean }
+      read_site_secret: {
+        Args: { _key: string; _kind: string; _site_id: string }
+        Returns: string
+      }
       site_org: { Args: { _site_id: string }; Returns: string }
+      write_site_secret: {
+        Args: { _key: string; _kind: string; _plain: string; _site_id: string }
+        Returns: string
+      }
     }
     Enums: {
       brief_status: "draft" | "ready" | "in_writing" | "complete" | "archived"
