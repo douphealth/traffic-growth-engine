@@ -1,14 +1,28 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageBody, PageHeader } from "@/components/page-header";
+import { PageBody, PageHeader, EmptyState } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { mockExperiments } from "@/lib/mock-data";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/_authenticated/experiments")({
   component: ExperimentsPage,
 });
 
 function ExperimentsPage() {
+  const q = useQuery({
+    queryKey: ["experiments"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("experiments")
+        .select("id, hypothesis, status, current_result, implementation_date, pages(url)")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   return (
     <>
       <PageHeader
@@ -16,20 +30,26 @@ function ExperimentsPage() {
         description="Every approved change becomes an experiment with a baseline. Outcomes are classified as win, loss, or neutral at 14, 28, 60, and 90 days."
       />
       <PageBody>
+        {q.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {q.data && q.data.length === 0 && (
+          <EmptyState
+            title="No experiments yet"
+            description="An experiment is recorded automatically when a diff is approved and published. Approve diffs in Validation to start tracking impact."
+          />
+        )}
         <div className="grid gap-3 md:grid-cols-2">
-          {mockExperiments.map((e) => (
+          {q.data?.map((e: any) => (
             <Card key={e.id}>
               <CardHeader>
                 <div className="flex items-center justify-between gap-2">
-                  <CardTitle className="text-sm">{e.page_url}</CardTitle>
+                  <CardTitle className="text-sm truncate">{e.pages?.url ?? "—"}</CardTitle>
                   <Badge variant="outline" className="capitalize">{e.status}</Badge>
                 </div>
-                <CardDescription className="text-xs">{e.hypothesis}</CardDescription>
+                <CardDescription className="text-xs">{e.hypothesis ?? "—"}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2 text-xs">
-                <Row label="Implemented" value={e.implemented_at ?? "—"} />
-                <Row label="Window" value={e.window} />
-                <Row label="Current result" value={<Badge variant="outline" className="capitalize">{e.result}</Badge>} />
+                <Row label="Implemented" value={e.implementation_date ? new Date(e.implementation_date).toLocaleDateString() : "—"} />
+                <Row label="Current result" value={<Badge variant="outline" className="capitalize">{e.current_result}</Badge>} />
               </CardContent>
             </Card>
           ))}

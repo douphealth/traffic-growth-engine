@@ -1,15 +1,28 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageBody, PageHeader } from "@/components/page-header";
+import { PageBody, PageHeader, EmptyState } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { mockSchemaItems } from "@/lib/mock-data";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/_authenticated/schema")({
   component: SchemaPage,
 });
 
 function SchemaPage() {
+  const q = useQuery({
+    queryKey: ["schema-items"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("schema_items")
+        .select("id, schema_type, visible_evidence_ok, status, pages(url)")
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   return (
     <>
       <PageHeader
@@ -17,42 +30,47 @@ function SchemaPage() {
         description="Schema is only recommended when supported by visible content. Fake ratings, unsupported reviews, and schema/content mismatch are blocked at validation."
       />
       <PageBody>
-        <Card>
-          <CardContent className="p-0">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/30 text-xs text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2.5 text-left font-medium">Page</th>
-                  <th className="px-4 py-2.5 text-left font-medium">Current</th>
-                  <th className="px-4 py-2.5 text-left font-medium">Recommended</th>
-                  <th className="px-4 py-2.5 text-left font-medium">Visible evidence</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mockSchemaItems.map((s) => (
-                  <tr key={s.page_url} className="border-t border-border">
-                    <td className="px-4 py-3 truncate max-w-[260px]">{s.page_url}</td>
-                    <td className="px-4 py-3"><Badge variant="outline">{s.current}</Badge></td>
-                    <td className="px-4 py-3"><Badge variant="secondary">{s.recommended}</Badge></td>
-                    <td className="px-4 py-3">
-                      {s.evidence_ok ? (
-                        <span className="text-xs text-success">✓ supported by visible content</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">— add visible FAQs first</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Button size="sm" variant="outline" disabled={!s.evidence_ok}>
-                        Generate JSON-LD
-                      </Button>
-                    </td>
+        {q.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {q.data && q.data.length === 0 && (
+          <EmptyState
+            title="No schema findings yet"
+            description="Schema items are detected when WordPress inventory is imported and pages are parsed for JSON-LD. Import inventory on a site to populate this view."
+          />
+        )}
+        {q.data && q.data.length > 0 && (
+          <Card>
+            <CardContent className="p-0">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/30 text-xs text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left font-medium">Page</th>
+                    <th className="px-4 py-2.5 text-left font-medium">Schema type</th>
+                    <th className="px-4 py-2.5 text-left font-medium">Status</th>
+                    <th className="px-4 py-2.5 text-left font-medium">Visible evidence</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
+                </thead>
+                <tbody>
+                  {q.data.map((s: any) => (
+                    <tr key={s.id} className="border-t border-border">
+                      <td className="px-4 py-3 truncate max-w-[320px]">{s.pages?.url ?? "—"}</td>
+                      <td className="px-4 py-3"><Badge variant="outline">{s.schema_type}</Badge></td>
+                      <td className="px-4 py-3"><Badge variant="secondary" className="capitalize">{s.status ?? "—"}</Badge></td>
+                      <td className="px-4 py-3">
+                        {s.visible_evidence_ok === true ? (
+                          <span className="text-xs text-success">✓ supported</span>
+                        ) : s.visible_evidence_ok === false ? (
+                          <span className="text-xs text-destructive">✗ unsupported</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">— unknown</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        )}
       </PageBody>
     </>
   );

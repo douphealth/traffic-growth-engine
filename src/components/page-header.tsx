@@ -6,7 +6,7 @@ export function PageHeader({
   title,
   description,
   actions,
-  badge = "mock data",
+  badge = null,
 }: {
   title: string;
   description?: string;
