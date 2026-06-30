@@ -114,21 +114,23 @@ function GscConnectPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const conn = connQ.data;
+  const propsRes = propsQ.data;
+  const properties = propsRes && propsRes.ok ? propsRes.properties : [];
+
   // Auto-link once properties are loaded and we have at least one unlinked property.
   useEffect(() => {
     if (!propsRes || !propsRes.ok) return;
-    if (!sitesQ.data || !mappingsQ.data) return;
+    if (!mappingsQ.data) return;
     const linkedIds = new Set((mappingsQ.data ?? []).map((m) => m.gsc_property_id));
-    const hasUnlinked = (propsRes.properties ?? []).some((p: { id: string }) => !linkedIds.has(p.id));
+    const hasUnlinked = (propsRes.properties ?? []).some(
+      (p: { id: string }) => !linkedIds.has(p.id),
+    );
     if (hasUnlinked && !autoLink.isPending && !autoLink.isSuccess) {
       autoLink.mutate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [propsRes, sitesQ.data, mappingsQ.data]);
-
-  const conn = connQ.data;
-  const propsRes = propsQ.data;
-  const properties = propsRes && propsRes.ok ? propsRes.properties : [];
+  }, [propsRes, mappingsQ.data]);
 
   return (
     <>
