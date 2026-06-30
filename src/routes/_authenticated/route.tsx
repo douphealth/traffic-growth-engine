@@ -20,7 +20,8 @@ export const Route = createFileRoute("/_authenticated")({
 
     const { data } = await supabase.auth.getSession();
     if (!data.session?.user) {
-      throw redirect({ to: "/auth", search: { redirect: location.href } });
+      const redirectTo = `${location.pathname}${location.searchStr}${location.hash}`;
+      throw redirect({ to: "/auth", search: { redirect: redirectTo } });
     }
     return { user: data.session.user };
   },
