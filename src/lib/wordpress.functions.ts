@@ -81,7 +81,7 @@ export const importWordpressInventory = createServerFn({ method: "POST" })
                   raw_content_html: rawHtml || null,
                   rendered_content_html: renderedHtml || null,
                   content_hash: hash,
-                  extracted: extracted as unknown as Record<string, unknown>,
+                  extracted: extracted as never,
                   last_imported_at: new Date().toISOString(),
                   indexability_status:
                     item?.status === "publish" ? "indexable" : "non-indexable",
@@ -98,9 +98,15 @@ export const importWordpressInventory = createServerFn({ method: "POST" })
             await supabaseAdmin.from("page_snapshots").insert({
               site_id: site.id,
               page_id: pageRow!.id,
-              source: "wp_import",
-              payload: item as unknown as Record<string, unknown>,
-              content_hash: hash,
+              raw_html: rawHtml || null,
+              rendered_html: renderedHtml || null,
+              headings: extracted.headings as never,
+              schema_jsonld: extracted.schema_jsonld as never,
+              internal_link_count: extracted.internal_links.length,
+              outbound_link_count: extracted.outbound_links.length,
+              affiliate_link_count: extracted.affiliate_links.length,
+              image_count: extracted.images.length,
+              hash,
             });
             imported++;
           } catch (e) {
