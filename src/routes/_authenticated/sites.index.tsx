@@ -64,7 +64,6 @@ function SitesPage() {
         )}
         {sitesQ.data && sitesQ.data.length === 0 && (
           <EmptyState
-            icon={Plus}
             title="No sites connected yet"
             description="Connect your first WordPress site to start importing real inventory and scoring opportunities."
             action={
