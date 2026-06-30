@@ -164,6 +164,32 @@ function OpportunityBoard() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // If we just returned from OAuth with ?auto_import=1, run the full pipeline once.
+  const autoFired = useRef(false);
+  const autoImport = useMutation({
+    mutationFn: () => importAllConnectedGscProperties(),
+    onSuccess: (r) => {
+      toast.success(
+        `Imported ${r.totals.rows} rows · ${r.totals.urls} URLs · ${r.totals.pages} pages · ${r.totals.opportunities} opportunities.`,
+      );
+      qc.invalidateQueries({ queryKey: ["opportunities"] });
+      qc.invalidateQueries({ queryKey: ["gsc-rows-count"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  useEffect(() => {
+    if (typeof window === "undefined" || autoFired.current) return;
+    const p = new URLSearchParams(window.location.search);
+    if (p.get("auto_import") === "1") {
+      autoFired.current = true;
+      autoImport.mutate();
+      p.delete("auto_import");
+      const newUrl = window.location.pathname + (p.toString() ? `?${p.toString()}` : "");
+      window.history.replaceState({}, "", newUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   return (
     <>
