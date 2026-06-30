@@ -257,6 +257,43 @@ function GscConnectPage() {
 
             <Card>
               <CardHeader>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base">Import data for all Search Console properties</CardTitle>
+                    <CardDescription>
+                      One click runs the full pipeline for every linked property: import GSC rows → discover pages from URLs → score opportunities.
+                    </CardDescription>
+                  </div>
+                  <Button onClick={() => importAll.mutate()} disabled={importAll.isPending}>
+                    {importAll.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+                    Import all properties
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {diagQ.data && (
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-3 lg:grid-cols-4">
+                    <DiagRow label="OAuth configured" value={diagQ.data.oauthConfigured ? "yes" : "no"} ok={diagQ.data.oauthConfigured} />
+                    <DiagRow label="Google connected" value={diagQ.data.connection ? "yes" : "no"} ok={!!diagQ.data.connection} />
+                    <DiagRow label="Account" value={diagQ.data.connection?.email ?? "—"} />
+                    <DiagRow label="Refresh token stored" value={diagQ.data.refreshTokenStored ? "yes" : "no"} ok={diagQ.data.refreshTokenStored} />
+                    <DiagRow label="GSC properties" value={String(diagQ.data.propertyCount)} />
+                    <DiagRow label="Linked to sites" value={String(diagQ.data.linkedSiteCount)} />
+                    <DiagRow label="GSC rows imported" value={String(diagQ.data.gscRows)} />
+                    <DiagRow label="URLs discovered" value={String(diagQ.data.gscUrls)} />
+                    <DiagRow label="Pages from GSC" value={String(diagQ.data.pagesFromGsc)} />
+                    <DiagRow label="Opportunities" value={String(diagQ.data.opportunities)} />
+                    <DiagRow label="Last import" value={diagQ.data.lastImport ? new Date(diagQ.data.lastImport).toLocaleString() : "never"} />
+                    <DiagRow label="Gateway fallback" value={diagQ.data.gatewayConfigured ? "available" : "off"} />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+
+
+            <Card>
+              <CardHeader>
                 <CardTitle className="text-base">Your Search Console properties</CardTitle>
                 <CardDescription>
                   These are auto-linked to site records. Manual linking below is only a repair tool
