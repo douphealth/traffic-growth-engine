@@ -15,6 +15,7 @@ import {
   connectGscPropertyToSite,
   disconnectGoogle,
   getGoogleConnection,
+  autoLinkGscProperties,
 } from "@/lib/gsc-oauth.functions";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -97,9 +98,39 @@ function GscConnectPage() {
     },
   });
 
+  const autoLink = useMutation({
+    mutationFn: () => autoLinkGscProperties(),
+    onSuccess: (r) => {
+      if (r.ok && (r.created > 0 || r.linked > 0)) {
+        toast.success(
+          `Auto-linked ${r.linked} propert${r.linked === 1 ? "y" : "ies"}` +
+            (r.created > 0 ? ` · created ${r.created} site${r.created === 1 ? "" : "s"}` : ""),
+        );
+      }
+      qc.invalidateQueries({ queryKey: ["site-gsc-mappings"] });
+      qc.invalidateQueries({ queryKey: ["sites-min"] });
+      qc.invalidateQueries({ queryKey: ["sites"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const conn = connQ.data;
   const propsRes = propsQ.data;
   const properties = propsRes && propsRes.ok ? propsRes.properties : [];
+
+  // Auto-link once properties are loaded and we have at least one unlinked property.
+  useEffect(() => {
+    if (!propsRes || !propsRes.ok) return;
+    if (!mappingsQ.data) return;
+    const linkedIds = new Set((mappingsQ.data ?? []).map((m) => m.gsc_property_id));
+    const hasUnlinked = (propsRes.properties ?? []).some(
+      (p: { id: string }) => !linkedIds.has(p.id),
+    );
+    if (hasUnlinked && !autoLink.isPending && !autoLink.isSuccess) {
+      autoLink.mutate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [propsRes, mappingsQ.data]);
 
   return (
     <>
