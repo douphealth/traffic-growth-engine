@@ -30,7 +30,7 @@ function DashboardPage() {
         supabase.from("sites").select("id", { count: "exact", head: true }),
         supabase.from("pages").select("id", { count: "exact", head: true }),
         supabase.from("opportunities").select("id", { count: "exact", head: true }).eq("status", "open"),
-        supabase.from("validation_runs").select("id", { count: "exact", head: true }).eq("status", "failed"),
+        supabase.from("validation_runs").select("id", { count: "exact", head: true }).eq("passed", false),
         supabase.from("publish_jobs").select("id", { count: "exact", head: true }).eq("status", "succeeded"),
       ]);
       return {
