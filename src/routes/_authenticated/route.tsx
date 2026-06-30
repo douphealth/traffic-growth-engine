@@ -18,11 +18,11 @@ export const Route = createFileRoute("/_authenticated")({
       return { user: null };
     }
 
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) {
+    const { data } = await supabase.auth.getSession();
+    if (!data.session?.user) {
       throw redirect({ to: "/auth", search: { redirect: location.href } });
     }
-    return { user: data.user };
+    return { user: data.session.user };
   },
   component: AuthenticatedLayout,
   pendingComponent: AuthLoading,
