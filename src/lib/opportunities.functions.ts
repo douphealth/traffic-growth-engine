@@ -11,8 +11,11 @@ type PageRow = {
   noindex: boolean | null;
   canonical_mismatch: boolean | null;
   in_sitemap: boolean | null;
+  post_type: string | null;
+  wp_post_id: number | null;
   extracted: { internal_links?: string[]; schema_jsonld?: unknown[]; affiliate_links?: string[] } | null;
 };
+
 
 // Expected CTR by position (approx Advanced Web Ranking 2024)
 const EXPECTED_CTR = [0, 0.32, 0.18, 0.12, 0.08, 0.06, 0.045, 0.035, 0.028, 0.022, 0.018];
