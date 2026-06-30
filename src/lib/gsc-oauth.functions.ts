@@ -260,19 +260,9 @@ export const startGscOAuth = createServerFn({ method: "POST" })
       };
     }
 
-    if (hasGscGatewayConnection()) {
-      const orgId = await getFirstOrgForUser(supabase, userId);
-      if (!orgId) return { ok: false as const, reason: "No workspace found for user." };
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const synced = await syncAndAutoLinkFromGateway(supabaseAdmin, orgId, userId);
-      return {
-        ok: true as const,
-        mode: "connector" as const,
-        created: synced.created,
-        linked: synced.linked,
-        properties: synced.properties.length,
-      };
-    }
+    // Gateway is only a fallback when first-party OAuth is not configured.
+    // (Block intentionally removed; OAuth path below handles configured installs.)
+
 
     const { data: member } = await supabase
       .from("organization_members")
