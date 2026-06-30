@@ -17,7 +17,12 @@ import {
   getGoogleConnection,
   autoLinkGscProperties,
 } from "@/lib/gsc-oauth.functions";
+import {
+  importAllConnectedGscProperties,
+  getGscDiagnostics,
+} from "@/lib/gsc-pages.functions";
 import { supabase } from "@/integrations/supabase/client";
+
 
 export const Route = createFileRoute("/_authenticated/gsc/connect")({
   component: GscConnectPage,
