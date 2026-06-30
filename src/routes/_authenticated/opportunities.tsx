@@ -230,10 +230,27 @@ function OpportunityBoard() {
 
         {oppsQ.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
 
-        {!oppsQ.isLoading && filtered.length === 0 && (
+        {!oppsQ.isLoading && filtered.length === 0 && (gscRowsQ.data ?? 0) > 0 && (
+          <Card className="border-warning/40 bg-warning/5">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">GSC data exists, but no opportunities were generated.</CardTitle>
+              <CardDescription>
+                This usually means pages were not synced from your GSC URLs. Run the repair below — it will discover pages from GSC URLs and rescore opportunities.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={() => repair.mutate()} disabled={repair.isPending}>
+                {repair.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+                Repair: create pages from GSC URLs and rescore
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {!oppsQ.isLoading && filtered.length === 0 && (gscRowsQ.data ?? 0) === 0 && (
           <EmptyState
             title="No opportunities yet"
-            description="Connect a site, import inventory, crawl the sitemap, import GSC data, then run scoring."
+            description="Connect Google Search Console, import data, then run scoring. WordPress is optional."
             action={
               <Button onClick={() => score.mutate()} disabled={score.isPending || !(sitesQ.data?.length)}>
                 <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Run opportunity scoring
@@ -241,6 +258,7 @@ function OpportunityBoard() {
             }
           />
         )}
+
 
         <div className="space-y-3">
           {filtered.map((o) => (
