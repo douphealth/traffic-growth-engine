@@ -15,6 +15,7 @@ import {
   connectGscPropertyToSite,
   disconnectGoogle,
   getGoogleConnection,
+  autoLinkGscProperties,
 } from "@/lib/gsc-oauth.functions";
 import { supabase } from "@/integrations/supabase/client";
 
