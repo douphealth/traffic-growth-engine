@@ -77,14 +77,21 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "AutoTraffic AI — Autonomous WordPress organic-growth OS" },
+      {
+        name: "description",
+        content:
+          "AutoTraffic AI is a data-driven WordPress growth engine for SEO, GEO, AEO, AI visibility, internal linking, schema, and affiliate monetization — with human-in-the-loop approval and rollback.",
+      },
+      { name: "author", content: "AutoTraffic AI" },
+      { property: "og:title", content: "AutoTraffic AI" },
+      {
+        property: "og:description",
+        content:
+          "Decide which WordPress URLs to update first, why, what to change, the risk, and how to measure success — with validation, approval, and rollback.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
       {
@@ -101,11 +108,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <head>
         <HeadContent />
       </head>
-      <body>
+      <body className="bg-background text-foreground antialiased">
         {children}
         <Scripts />
       </body>

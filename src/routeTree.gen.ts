@@ -9,38 +9,263 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedValidationRouteImport } from './routes/_authenticated/validation'
+import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedSchemaRouteImport } from './routes/_authenticated/schema'
+import { Route as AuthenticatedRevenueRouteImport } from './routes/_authenticated/revenue'
+import { Route as AuthenticatedPublishingRouteImport } from './routes/_authenticated/publishing'
+import { Route as AuthenticatedOpportunitiesRouteImport } from './routes/_authenticated/opportunities'
+import { Route as AuthenticatedMonetizationRouteImport } from './routes/_authenticated/monetization'
+import { Route as AuthenticatedKeywordsRouteImport } from './routes/_authenticated/keywords'
+import { Route as AuthenticatedInternalLinksRouteImport } from './routes/_authenticated/internal-links'
+import { Route as AuthenticatedExperimentsRouteImport } from './routes/_authenticated/experiments'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedContentRouteImport } from './routes/_authenticated/content'
+import { Route as AuthenticatedAiVisibilityRouteImport } from './routes/_authenticated/ai-visibility'
+import { Route as AuthenticatedSitesIndexRouteImport } from './routes/_authenticated/sites.index'
+import { Route as AuthenticatedSitesConnectRouteImport } from './routes/_authenticated/sites.connect'
 
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedValidationRoute = AuthenticatedValidationRouteImport.update({
+  id: '/validation',
+  path: '/validation',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSchemaRoute = AuthenticatedSchemaRouteImport.update({
+  id: '/schema',
+  path: '/schema',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedRevenueRoute = AuthenticatedRevenueRouteImport.update({
+  id: '/revenue',
+  path: '/revenue',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedPublishingRoute = AuthenticatedPublishingRouteImport.update({
+  id: '/publishing',
+  path: '/publishing',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedOpportunitiesRoute =
+  AuthenticatedOpportunitiesRouteImport.update({
+    id: '/opportunities',
+    path: '/opportunities',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedMonetizationRoute =
+  AuthenticatedMonetizationRouteImport.update({
+    id: '/monetization',
+    path: '/monetization',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedKeywordsRoute = AuthenticatedKeywordsRouteImport.update({
+  id: '/keywords',
+  path: '/keywords',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedInternalLinksRoute =
+  AuthenticatedInternalLinksRouteImport.update({
+    id: '/internal-links',
+    path: '/internal-links',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedExperimentsRoute =
+  AuthenticatedExperimentsRouteImport.update({
+    id: '/experiments',
+    path: '/experiments',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedContentRoute = AuthenticatedContentRouteImport.update({
+  id: '/content',
+  path: '/content',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAiVisibilityRoute =
+  AuthenticatedAiVisibilityRouteImport.update({
+    id: '/ai-visibility',
+    path: '/ai-visibility',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSitesIndexRoute = AuthenticatedSitesIndexRouteImport.update({
+  id: '/sites/',
+  path: '/sites/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSitesConnectRoute =
+  AuthenticatedSitesConnectRouteImport.update({
+    id: '/sites/connect',
+    path: '/sites/connect',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/ai-visibility': typeof AuthenticatedAiVisibilityRoute
+  '/content': typeof AuthenticatedContentRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/experiments': typeof AuthenticatedExperimentsRoute
+  '/internal-links': typeof AuthenticatedInternalLinksRoute
+  '/keywords': typeof AuthenticatedKeywordsRoute
+  '/monetization': typeof AuthenticatedMonetizationRoute
+  '/opportunities': typeof AuthenticatedOpportunitiesRoute
+  '/publishing': typeof AuthenticatedPublishingRoute
+  '/revenue': typeof AuthenticatedRevenueRoute
+  '/schema': typeof AuthenticatedSchemaRoute
+  '/settings': typeof AuthenticatedSettingsRoute
+  '/validation': typeof AuthenticatedValidationRoute
+  '/sites/connect': typeof AuthenticatedSitesConnectRoute
+  '/sites/': typeof AuthenticatedSitesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/ai-visibility': typeof AuthenticatedAiVisibilityRoute
+  '/content': typeof AuthenticatedContentRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/experiments': typeof AuthenticatedExperimentsRoute
+  '/internal-links': typeof AuthenticatedInternalLinksRoute
+  '/keywords': typeof AuthenticatedKeywordsRoute
+  '/monetization': typeof AuthenticatedMonetizationRoute
+  '/opportunities': typeof AuthenticatedOpportunitiesRoute
+  '/publishing': typeof AuthenticatedPublishingRoute
+  '/revenue': typeof AuthenticatedRevenueRoute
+  '/schema': typeof AuthenticatedSchemaRoute
+  '/settings': typeof AuthenticatedSettingsRoute
+  '/validation': typeof AuthenticatedValidationRoute
+  '/sites/connect': typeof AuthenticatedSitesConnectRoute
+  '/sites': typeof AuthenticatedSitesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/_authenticated/ai-visibility': typeof AuthenticatedAiVisibilityRoute
+  '/_authenticated/content': typeof AuthenticatedContentRoute
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/experiments': typeof AuthenticatedExperimentsRoute
+  '/_authenticated/internal-links': typeof AuthenticatedInternalLinksRoute
+  '/_authenticated/keywords': typeof AuthenticatedKeywordsRoute
+  '/_authenticated/monetization': typeof AuthenticatedMonetizationRoute
+  '/_authenticated/opportunities': typeof AuthenticatedOpportunitiesRoute
+  '/_authenticated/publishing': typeof AuthenticatedPublishingRoute
+  '/_authenticated/revenue': typeof AuthenticatedRevenueRoute
+  '/_authenticated/schema': typeof AuthenticatedSchemaRoute
+  '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/validation': typeof AuthenticatedValidationRoute
+  '/_authenticated/sites/connect': typeof AuthenticatedSitesConnectRoute
+  '/_authenticated/sites/': typeof AuthenticatedSitesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/ai-visibility'
+    | '/content'
+    | '/dashboard'
+    | '/experiments'
+    | '/internal-links'
+    | '/keywords'
+    | '/monetization'
+    | '/opportunities'
+    | '/publishing'
+    | '/revenue'
+    | '/schema'
+    | '/settings'
+    | '/validation'
+    | '/sites/connect'
+    | '/sites/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/auth'
+    | '/ai-visibility'
+    | '/content'
+    | '/dashboard'
+    | '/experiments'
+    | '/internal-links'
+    | '/keywords'
+    | '/monetization'
+    | '/opportunities'
+    | '/publishing'
+    | '/revenue'
+    | '/schema'
+    | '/settings'
+    | '/validation'
+    | '/sites/connect'
+    | '/sites'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authenticated'
+    | '/auth'
+    | '/_authenticated/ai-visibility'
+    | '/_authenticated/content'
+    | '/_authenticated/dashboard'
+    | '/_authenticated/experiments'
+    | '/_authenticated/internal-links'
+    | '/_authenticated/keywords'
+    | '/_authenticated/monetization'
+    | '/_authenticated/opportunities'
+    | '/_authenticated/publishing'
+    | '/_authenticated/revenue'
+    | '/_authenticated/schema'
+    | '/_authenticated/settings'
+    | '/_authenticated/validation'
+    | '/_authenticated/sites/connect'
+    | '/_authenticated/sites/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthRoute: typeof AuthRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,22 +273,158 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/validation': {
+      id: '/_authenticated/validation'
+      path: '/validation'
+      fullPath: '/validation'
+      preLoaderRoute: typeof AuthenticatedValidationRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/settings': {
+      id: '/_authenticated/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/schema': {
+      id: '/_authenticated/schema'
+      path: '/schema'
+      fullPath: '/schema'
+      preLoaderRoute: typeof AuthenticatedSchemaRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/revenue': {
+      id: '/_authenticated/revenue'
+      path: '/revenue'
+      fullPath: '/revenue'
+      preLoaderRoute: typeof AuthenticatedRevenueRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/publishing': {
+      id: '/_authenticated/publishing'
+      path: '/publishing'
+      fullPath: '/publishing'
+      preLoaderRoute: typeof AuthenticatedPublishingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/opportunities': {
+      id: '/_authenticated/opportunities'
+      path: '/opportunities'
+      fullPath: '/opportunities'
+      preLoaderRoute: typeof AuthenticatedOpportunitiesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/monetization': {
+      id: '/_authenticated/monetization'
+      path: '/monetization'
+      fullPath: '/monetization'
+      preLoaderRoute: typeof AuthenticatedMonetizationRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/keywords': {
+      id: '/_authenticated/keywords'
+      path: '/keywords'
+      fullPath: '/keywords'
+      preLoaderRoute: typeof AuthenticatedKeywordsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/internal-links': {
+      id: '/_authenticated/internal-links'
+      path: '/internal-links'
+      fullPath: '/internal-links'
+      preLoaderRoute: typeof AuthenticatedInternalLinksRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/experiments': {
+      id: '/_authenticated/experiments'
+      path: '/experiments'
+      fullPath: '/experiments'
+      preLoaderRoute: typeof AuthenticatedExperimentsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/content': {
+      id: '/_authenticated/content'
+      path: '/content'
+      fullPath: '/content'
+      preLoaderRoute: typeof AuthenticatedContentRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/ai-visibility': {
+      id: '/_authenticated/ai-visibility'
+      path: '/ai-visibility'
+      fullPath: '/ai-visibility'
+      preLoaderRoute: typeof AuthenticatedAiVisibilityRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/sites/': {
+      id: '/_authenticated/sites/'
+      path: '/sites'
+      fullPath: '/sites/'
+      preLoaderRoute: typeof AuthenticatedSitesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/sites/connect': {
+      id: '/_authenticated/sites/connect'
+      path: '/sites/connect'
+      fullPath: '/sites/connect'
+      preLoaderRoute: typeof AuthenticatedSitesConnectRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAiVisibilityRoute: typeof AuthenticatedAiVisibilityRoute
+  AuthenticatedContentRoute: typeof AuthenticatedContentRoute
+  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedExperimentsRoute: typeof AuthenticatedExperimentsRoute
+  AuthenticatedInternalLinksRoute: typeof AuthenticatedInternalLinksRoute
+  AuthenticatedKeywordsRoute: typeof AuthenticatedKeywordsRoute
+  AuthenticatedMonetizationRoute: typeof AuthenticatedMonetizationRoute
+  AuthenticatedOpportunitiesRoute: typeof AuthenticatedOpportunitiesRoute
+  AuthenticatedPublishingRoute: typeof AuthenticatedPublishingRoute
+  AuthenticatedRevenueRoute: typeof AuthenticatedRevenueRoute
+  AuthenticatedSchemaRoute: typeof AuthenticatedSchemaRoute
+  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedValidationRoute: typeof AuthenticatedValidationRoute
+  AuthenticatedSitesConnectRoute: typeof AuthenticatedSitesConnectRoute
+  AuthenticatedSitesIndexRoute: typeof AuthenticatedSitesIndexRoute
+}
+
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAiVisibilityRoute: AuthenticatedAiVisibilityRoute,
+  AuthenticatedContentRoute: AuthenticatedContentRoute,
+  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedExperimentsRoute: AuthenticatedExperimentsRoute,
+  AuthenticatedInternalLinksRoute: AuthenticatedInternalLinksRoute,
+  AuthenticatedKeywordsRoute: AuthenticatedKeywordsRoute,
+  AuthenticatedMonetizationRoute: AuthenticatedMonetizationRoute,
+  AuthenticatedOpportunitiesRoute: AuthenticatedOpportunitiesRoute,
+  AuthenticatedPublishingRoute: AuthenticatedPublishingRoute,
+  AuthenticatedRevenueRoute: AuthenticatedRevenueRoute,
+  AuthenticatedSchemaRoute: AuthenticatedSchemaRoute,
+  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedValidationRoute: AuthenticatedValidationRoute,
+  AuthenticatedSitesConnectRoute: AuthenticatedSitesConnectRoute,
+  AuthenticatedSitesIndexRoute: AuthenticatedSitesIndexRoute,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthRoute: AuthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
