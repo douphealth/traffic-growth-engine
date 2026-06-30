@@ -11,8 +11,11 @@ type PageRow = {
   noindex: boolean | null;
   canonical_mismatch: boolean | null;
   in_sitemap: boolean | null;
+  post_type: string | null;
+  wp_post_id: number | null;
   extracted: { internal_links?: string[]; schema_jsonld?: unknown[]; affiliate_links?: string[] } | null;
 };
+
 
 // Expected CTR by position (approx Advanced Web Ranking 2024)
 const EXPECTED_CTR = [0, 0.32, 0.18, 0.12, 0.08, 0.06, 0.045, 0.035, 0.028, 0.022, 0.018];
@@ -38,7 +41,7 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
     // Load pages
     const { data: pages } = await supabaseAdmin
       .from("pages")
-      .select("id, url, title, word_count, status, noindex, canonical_mismatch, in_sitemap, extracted")
+      .select("id, url, title, word_count, status, noindex, canonical_mismatch, in_sitemap, post_type, wp_post_id, extracted")
       .eq("site_id", site.id);
     const pageList = (pages ?? []) as PageRow[];
     const pageByUrl = new Map(pageList.map((p) => [p.url, p]));
@@ -161,10 +164,12 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
       const prev = aggPrev.get(p.url) ?? { clicks: 0, impressions: 0, positionSum: 0, positionN: 0 };
       const avgPos = a.positionN ? a.positionSum / a.positionN : null;
       const ctr = a.impressions ? a.clicks / a.impressions : 0;
+      const hasWpContent = p.wp_post_id != null || p.post_type !== "gsc_url" && p.extracted != null;
       const hasSchema = (p.extracted?.schema_jsonld?.length ?? 0) > 0;
       const hasAffiliate = (p.extracted?.affiliate_links?.length ?? 0) > 0;
       const inbound = inboundCount.get(p.url) ?? 0;
       const upside = clamp((a.impressions / 50) + a.clicks / 5);
+
 
       // CTR leak: pos<=10 and ctr < expected*0.7
       if (avgPos != null && avgPos <= 10 && a.impressions >= 200) {
@@ -264,8 +269,8 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
         });
       }
 
-      // Internal link gap
-      if (inbound === 0 && (a.impressions > 50 || (p.word_count ?? 0) > 800)) {
+      // Internal link gap (requires WP content)
+      if (hasWpContent && inbound === 0 && (a.impressions > 50 || (p.word_count ?? 0) > 800)) {
         opps.push({
           site_id: site.id,
           page_id: p.id,
@@ -287,8 +292,8 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
         });
       }
 
-      // Schema gap
-      if (!hasSchema && a.impressions >= 100) {
+      // Schema gap (requires WP content)
+      if (hasWpContent && !hasSchema && a.impressions >= 100) {
         opps.push({
           site_id: site.id,
           page_id: p.id,
@@ -310,8 +315,8 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
         });
       }
 
-      // AI answer gap (long-form, no h2-driven FAQ-style summary)
-      if ((p.word_count ?? 0) > 1200 && a.impressions >= 50) {
+      // AI answer gap (requires WP content + word count)
+      if (hasWpContent && (p.word_count ?? 0) > 1200 && a.impressions >= 50) {
         opps.push({
           site_id: site.id,
           page_id: p.id,
@@ -333,8 +338,8 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
         });
       }
 
-      // Monetization leak
-      if (!hasAffiliate && a.clicks >= 30) {
+      // Monetization leak (requires WP content)
+      if (hasWpContent && !hasAffiliate && a.clicks >= 30) {
         opps.push({
           site_id: site.id,
           page_id: p.id,
@@ -356,6 +361,7 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
         });
       }
     }
+
 
     // Cannibalization across pages
     for (const [query, urls] of urlsByQuery) {

@@ -261,17 +261,22 @@ export const Route = createFileRoute("/api/public/gsc/oauth/callback")({
           });
         }
 
+        // After auto-linking, redirect straight to /opportunities with an
+        // `auto_import=1` flag so the client kicks off the full pipeline
+        // (import GSC rows → sync pages → score opportunities) immediately.
         const dest = st.redirect_after && st.redirect_after.startsWith("/")
           ? st.redirect_after
-          : "/gsc/connect";
+          : "/opportunities";
         const destination = new URL(dest, appOrigin);
         destination.searchParams.set("gsc", "connected");
+        destination.searchParams.set("auto_import", "1");
         if (syncResult) {
           destination.searchParams.set("properties", String(syncResult.properties));
           destination.searchParams.set("created", String(syncResult.created));
           destination.searchParams.set("linked", String(syncResult.linked));
         }
         return Response.redirect(destination.toString(), 302);
+
       },
     },
   },

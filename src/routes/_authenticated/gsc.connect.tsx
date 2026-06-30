@@ -17,7 +17,12 @@ import {
   getGoogleConnection,
   autoLinkGscProperties,
 } from "@/lib/gsc-oauth.functions";
+import {
+  importAllConnectedGscProperties,
+  getGscDiagnostics,
+} from "@/lib/gsc-pages.functions";
 import { supabase } from "@/integrations/supabase/client";
+
 
 export const Route = createFileRoute("/_authenticated/gsc/connect")({
   component: GscConnectPage,
@@ -140,6 +145,30 @@ function GscConnectPage() {
   const propsRes = propsQ.data;
   const properties = propsRes && propsRes.ok ? propsRes.properties : [];
 
+  const diagQ = useQuery({
+    queryKey: ["gsc-diagnostics"],
+    queryFn: () => getGscDiagnostics(),
+    refetchOnWindowFocus: false,
+  });
+
+  const importAll = useMutation({
+    mutationFn: () => importAllConnectedGscProperties(),
+    onSuccess: (r) => {
+      toast.success(
+        `Imported ${r.totals.rows} rows · ${r.totals.urls} URLs · ${r.totals.pages} pages · ${r.totals.opportunities} opportunities across ${r.processed} site${r.processed === 1 ? "" : "s"}.`,
+      );
+      const failures = r.results.filter((x) => !x.ok);
+      if (failures.length) {
+        toast.error(`${failures.length} site${failures.length === 1 ? "" : "s"} failed — see diagnostics.`);
+      }
+      qc.invalidateQueries({ queryKey: ["gsc-diagnostics"] });
+      qc.invalidateQueries({ queryKey: ["opportunities"] });
+      qc.invalidateQueries({ queryKey: ["sites"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+
   // Auto-link once properties are loaded and we have at least one unlinked property.
   useEffect(() => {
     if (!propsRes || !propsRes.ok) return;
@@ -225,6 +254,43 @@ function GscConnectPage() {
                 </div>
               </CardHeader>
             </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base">Import data for all Search Console properties</CardTitle>
+                    <CardDescription>
+                      One click runs the full pipeline for every linked property: import GSC rows → discover pages from URLs → score opportunities.
+                    </CardDescription>
+                  </div>
+                  <Button onClick={() => importAll.mutate()} disabled={importAll.isPending}>
+                    {importAll.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+                    Import all properties
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {diagQ.data && (
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-3 lg:grid-cols-4">
+                    <DiagRow label="OAuth configured" value={diagQ.data.oauthConfigured ? "yes" : "no"} ok={diagQ.data.oauthConfigured} />
+                    <DiagRow label="Google connected" value={diagQ.data.connection ? "yes" : "no"} ok={!!diagQ.data.connection} />
+                    <DiagRow label="Account" value={diagQ.data.connection?.email ?? "—"} />
+                    <DiagRow label="Refresh token stored" value={diagQ.data.refreshTokenStored ? "yes" : "no"} ok={diagQ.data.refreshTokenStored} />
+                    <DiagRow label="GSC properties" value={String(diagQ.data.propertyCount)} />
+                    <DiagRow label="Linked to sites" value={String(diagQ.data.linkedSiteCount)} />
+                    <DiagRow label="GSC rows imported" value={String(diagQ.data.gscRows)} />
+                    <DiagRow label="URLs discovered" value={String(diagQ.data.gscUrls)} />
+                    <DiagRow label="Pages from GSC" value={String(diagQ.data.pagesFromGsc)} />
+                    <DiagRow label="Opportunities" value={String(diagQ.data.opportunities)} />
+                    <DiagRow label="Last import" value={diagQ.data.lastImport ? new Date(diagQ.data.lastImport).toLocaleString() : "never"} />
+                    <DiagRow label="Gateway fallback" value={diagQ.data.gatewayConfigured ? "available" : "off"} />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+
 
             <Card>
               <CardHeader>
@@ -333,6 +399,15 @@ function PropertyRow({
           Link
         </Button>
       </div>
+    </div>
+  );
+}
+
+function DiagRow({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-2 border-b border-border/40 py-1">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={ok === true ? "font-medium text-success" : ok === false ? "font-medium text-destructive" : "font-medium"}>{value}</span>
     </div>
   );
 }

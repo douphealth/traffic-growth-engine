@@ -5,12 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, FileEdit, Loader2, Target, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { scoreOpportunities } from "@/lib/opportunities.functions";
+import { syncPagesFromGsc, importAllConnectedGscProperties } from "@/lib/gsc-pages.functions";
 import { toast } from "sonner";
+
 
 export const Route = createFileRoute("/_authenticated/opportunities")({
   component: OpportunityBoard,
@@ -127,6 +129,68 @@ function OpportunityBoard() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // Diagnostic: are there GSC rows but zero opportunities? (suggests pages weren't synced)
+  const gscRowsQ = useQuery({
+    queryKey: ["gsc-rows-count"],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("gsc_page_query_daily")
+        .select("site_id", { count: "exact", head: true });
+      return count ?? 0;
+    },
+  });
+
+  const repair = useMutation({
+    mutationFn: async () => {
+      const sites = sitesQ.data ?? [];
+      const targets = siteId === "all" ? sites : sites.filter((s) => s.id === siteId);
+      if (!targets.length) {
+        const r = await importAllConnectedGscProperties();
+        return { mode: "import_all" as const, opps: r.totals.opportunities };
+      }
+      let opps = 0;
+      for (const s of targets) {
+        await syncPagesFromGsc({ data: { site_id: s.id } });
+        const r = await scoreOpportunities({ data: { site_id: s.id } });
+        opps += r.inserted;
+      }
+      return { mode: "rescore" as const, opps };
+    },
+    onSuccess: (r) => {
+      toast.success(`Repair complete — ${r.opps} opportunities generated.`);
+      qc.invalidateQueries({ queryKey: ["opportunities"] });
+      qc.invalidateQueries({ queryKey: ["gsc-rows-count"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // If we just returned from OAuth with ?auto_import=1, run the full pipeline once.
+  const autoFired = useRef(false);
+  const autoImport = useMutation({
+    mutationFn: () => importAllConnectedGscProperties(),
+    onSuccess: (r) => {
+      toast.success(
+        `Imported ${r.totals.rows} rows · ${r.totals.urls} URLs · ${r.totals.pages} pages · ${r.totals.opportunities} opportunities.`,
+      );
+      qc.invalidateQueries({ queryKey: ["opportunities"] });
+      qc.invalidateQueries({ queryKey: ["gsc-rows-count"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  useEffect(() => {
+    if (typeof window === "undefined" || autoFired.current) return;
+    const p = new URLSearchParams(window.location.search);
+    if (p.get("auto_import") === "1") {
+      autoFired.current = true;
+      autoImport.mutate();
+      p.delete("auto_import");
+      const newUrl = window.location.pathname + (p.toString() ? `?${p.toString()}` : "");
+      window.history.replaceState({}, "", newUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
   return (
     <>
       <PageHeader
@@ -192,10 +256,27 @@ function OpportunityBoard() {
 
         {oppsQ.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
 
-        {!oppsQ.isLoading && filtered.length === 0 && (
+        {!oppsQ.isLoading && filtered.length === 0 && (gscRowsQ.data ?? 0) > 0 && (
+          <Card className="border-warning/40 bg-warning/5">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">GSC data exists, but no opportunities were generated.</CardTitle>
+              <CardDescription>
+                This usually means pages were not synced from your GSC URLs. Run the repair below — it will discover pages from GSC URLs and rescore opportunities.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={() => repair.mutate()} disabled={repair.isPending}>
+                {repair.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+                Repair: create pages from GSC URLs and rescore
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {!oppsQ.isLoading && filtered.length === 0 && (gscRowsQ.data ?? 0) === 0 && (
           <EmptyState
             title="No opportunities yet"
-            description="Connect a site, import inventory, crawl the sitemap, import GSC data, then run scoring."
+            description="Connect Google Search Console, import data, then run scoring. WordPress is optional."
             action={
               <Button onClick={() => score.mutate()} disabled={score.isPending || !(sitesQ.data?.length)}>
                 <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Run opportunity scoring
@@ -203,6 +284,7 @@ function OpportunityBoard() {
             }
           />
         )}
+
 
         <div className="space-y-3">
           {filtered.map((o) => (
