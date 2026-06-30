@@ -27,6 +27,7 @@ import { Route as AuthenticatedContentRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedAiVisibilityRouteImport } from './routes/_authenticated/ai-visibility'
 import { Route as AuthenticatedSitesIndexRouteImport } from './routes/_authenticated/sites.index'
 import { Route as AuthenticatedSitesConnectRouteImport } from './routes/_authenticated/sites.connect'
+import { Route as ApiPublicGscOauthCallbackRouteImport } from './routes/api/public/gsc.oauth.callback'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -123,6 +124,12 @@ const AuthenticatedSitesConnectRoute =
     path: '/sites/connect',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const ApiPublicGscOauthCallbackRoute =
+  ApiPublicGscOauthCallbackRouteImport.update({
+    id: '/api/public/gsc/oauth/callback',
+    path: '/api/public/gsc/oauth/callback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -142,6 +149,7 @@ export interface FileRoutesByFullPath {
   '/validation': typeof AuthenticatedValidationRoute
   '/sites/connect': typeof AuthenticatedSitesConnectRoute
   '/sites/': typeof AuthenticatedSitesIndexRoute
+  '/api/public/gsc/oauth/callback': typeof ApiPublicGscOauthCallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -161,6 +169,7 @@ export interface FileRoutesByTo {
   '/validation': typeof AuthenticatedValidationRoute
   '/sites/connect': typeof AuthenticatedSitesConnectRoute
   '/sites': typeof AuthenticatedSitesIndexRoute
+  '/api/public/gsc/oauth/callback': typeof ApiPublicGscOauthCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -182,6 +191,7 @@ export interface FileRoutesById {
   '/_authenticated/validation': typeof AuthenticatedValidationRoute
   '/_authenticated/sites/connect': typeof AuthenticatedSitesConnectRoute
   '/_authenticated/sites/': typeof AuthenticatedSitesIndexRoute
+  '/api/public/gsc/oauth/callback': typeof ApiPublicGscOauthCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -203,6 +213,7 @@ export interface FileRouteTypes {
     | '/validation'
     | '/sites/connect'
     | '/sites/'
+    | '/api/public/gsc/oauth/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -222,6 +233,7 @@ export interface FileRouteTypes {
     | '/validation'
     | '/sites/connect'
     | '/sites'
+    | '/api/public/gsc/oauth/callback'
   id:
     | '__root__'
     | '/'
@@ -242,12 +254,14 @@ export interface FileRouteTypes {
     | '/_authenticated/validation'
     | '/_authenticated/sites/connect'
     | '/_authenticated/sites/'
+    | '/api/public/gsc/oauth/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiPublicGscOauthCallbackRoute: typeof ApiPublicGscOauthCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -378,6 +392,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSitesConnectRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/gsc/oauth/callback': {
+      id: '/api/public/gsc/oauth/callback'
+      path: '/api/public/gsc/oauth/callback'
+      fullPath: '/api/public/gsc/oauth/callback'
+      preLoaderRoute: typeof ApiPublicGscOauthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -424,6 +445,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiPublicGscOauthCallbackRoute: ApiPublicGscOauthCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
