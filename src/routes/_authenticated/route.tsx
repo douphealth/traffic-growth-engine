@@ -34,7 +34,8 @@ function AuthenticatedLayout() {
 
   useEffect(() => {
     if (!loading && !user) {
-      navigate({ to: "/auth", search: { redirect: window.location.href }, replace: true });
+      const redirectTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      navigate({ to: "/auth", search: { redirect: redirectTo }, replace: true });
     }
   }, [loading, navigate, user]);
 
