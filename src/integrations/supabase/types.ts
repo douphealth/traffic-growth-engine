@@ -1024,6 +1024,7 @@ export type Database = {
           created_at: string
           effort_score: number | null
           evidence: Json | null
+          generated_at: string | null
           id: string
           impact_score: number | null
           page_id: string | null
@@ -1033,6 +1034,7 @@ export type Database = {
           risk_score: number | null
           severity: number | null
           site_id: string
+          source_data: Json | null
           status: Database["public"]["Enums"]["opportunity_status"]
           summary: string | null
           title: string
@@ -1045,6 +1047,7 @@ export type Database = {
           created_at?: string
           effort_score?: number | null
           evidence?: Json | null
+          generated_at?: string | null
           id?: string
           impact_score?: number | null
           page_id?: string | null
@@ -1054,6 +1057,7 @@ export type Database = {
           risk_score?: number | null
           severity?: number | null
           site_id: string
+          source_data?: Json | null
           status?: Database["public"]["Enums"]["opportunity_status"]
           summary?: string | null
           title: string
@@ -1066,6 +1070,7 @@ export type Database = {
           created_at?: string
           effort_score?: number | null
           evidence?: Json | null
+          generated_at?: string | null
           id?: string
           impact_score?: number | null
           page_id?: string | null
@@ -1075,6 +1080,7 @@ export type Database = {
           risk_score?: number | null
           severity?: number | null
           site_id?: string
+          source_data?: Json | null
           status?: Database["public"]["Enums"]["opportunity_status"]
           summary?: string | null
           title?: string
@@ -1224,17 +1230,27 @@ export type Database = {
       pages: {
         Row: {
           canonical: string | null
+          canonical_mismatch: boolean | null
+          content_hash: string | null
           created_at: string
           embedding: string | null
           excerpt: string | null
+          extracted: Json | null
           health_score: number | null
           id: string
+          in_sitemap: boolean | null
+          indexability_status: string | null
           intent: string | null
           last_audited_at: string | null
+          last_imported_at: string | null
           meta_description: string | null
+          meta_title: string | null
           modified_at: string | null
+          noindex: boolean | null
           post_type: string | null
           primary_keyword: string | null
+          raw_content_html: string | null
+          rendered_content_html: string | null
           site_id: string
           slug: string | null
           status: string | null
@@ -1246,17 +1262,27 @@ export type Database = {
         }
         Insert: {
           canonical?: string | null
+          canonical_mismatch?: boolean | null
+          content_hash?: string | null
           created_at?: string
           embedding?: string | null
           excerpt?: string | null
+          extracted?: Json | null
           health_score?: number | null
           id?: string
+          in_sitemap?: boolean | null
+          indexability_status?: string | null
           intent?: string | null
           last_audited_at?: string | null
+          last_imported_at?: string | null
           meta_description?: string | null
+          meta_title?: string | null
           modified_at?: string | null
+          noindex?: boolean | null
           post_type?: string | null
           primary_keyword?: string | null
+          raw_content_html?: string | null
+          rendered_content_html?: string | null
           site_id: string
           slug?: string | null
           status?: string | null
@@ -1268,17 +1294,27 @@ export type Database = {
         }
         Update: {
           canonical?: string | null
+          canonical_mismatch?: boolean | null
+          content_hash?: string | null
           created_at?: string
           embedding?: string | null
           excerpt?: string | null
+          extracted?: Json | null
           health_score?: number | null
           id?: string
+          in_sitemap?: boolean | null
+          indexability_status?: string | null
           intent?: string | null
           last_audited_at?: string | null
+          last_imported_at?: string | null
           meta_description?: string | null
+          meta_title?: string | null
           modified_at?: string | null
+          noindex?: boolean | null
           post_type?: string | null
           primary_keyword?: string | null
+          raw_content_html?: string | null
+          rendered_content_html?: string | null
           site_id?: string
           slug?: string | null
           status?: string | null
@@ -1846,8 +1882,27 @@ export type Database = {
     }
     Functions: {
       can_access_site: { Args: { _site_id: string }; Returns: boolean }
+      can_admin_site: { Args: { _site_id: string }; Returns: boolean }
+      can_edit_site: { Args: { _site_id: string }; Returns: boolean }
+      has_org_role: {
+        Args: {
+          _min_role: Database["public"]["Enums"]["org_role"]
+          _org_id: string
+          _user_id: string
+        }
+        Returns: boolean
+      }
       is_org_admin: { Args: { _org_id: string }; Returns: boolean }
       is_org_member: { Args: { _org_id: string }; Returns: boolean }
+      read_site_secret: {
+        Args: { _key: string; _kind: string; _site_id: string }
+        Returns: string
+      }
+      site_org: { Args: { _site_id: string }; Returns: string }
+      write_site_secret: {
+        Args: { _key: string; _kind: string; _plain: string; _site_id: string }
+        Returns: string
+      }
     }
     Enums: {
       brief_status: "draft" | "ready" | "in_writing" | "complete" | "archived"

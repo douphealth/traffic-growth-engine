@@ -36,6 +36,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useDemoMode } from "@/hooks/use-demo-mode";
 import { toast } from "sonner";
 import type { ReactNode } from "react";
 
@@ -75,7 +76,7 @@ function AppSidebar() {
           {!collapsed && (
             <div className="flex flex-col">
               <span className="text-sm font-semibold tracking-tight">AutoTraffic AI</span>
-              <span className="text-[10px] text-muted-foreground">Phase 1 · mock data</span>
+              <span className="text-[10px] text-muted-foreground">Growth OS</span>
             </div>
           )}
         </Link>
@@ -133,6 +134,7 @@ function AppSidebar() {
 export function AppShell({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [demo] = useDemoMode();
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -145,14 +147,18 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-h-screen w-full bg-background">
         <AppSidebar />
         <div className="flex flex-1 flex-col min-w-0">
+          {demo && (
+            <div className="border-b border-warning/40 bg-warning/10 px-4 py-1.5 text-center text-[11px] font-medium text-warning">
+              Demo mode is ON — screens that lack real data show mock fixtures. Toggle off in Settings.
+            </div>
+          )}
           <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
             <div className="flex items-center gap-2">
               <SidebarTrigger />
               <div className="hidden sm:block text-sm text-muted-foreground">
-                <span className="text-foreground font-medium">Demo Site</span>
+                <span className="text-foreground font-medium">AutoTraffic AI</span>
                 <span className="mx-2">·</span>
-                <span>example-demo.com</span>
-                <Badge variant="outline" className="ml-2 text-[10px]">mock</Badge>
+                <span>Growth OS</span>
               </div>
             </div>
             <div className="flex items-center gap-2">
