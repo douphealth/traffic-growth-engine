@@ -41,7 +41,7 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
     // Load pages
     const { data: pages } = await supabaseAdmin
       .from("pages")
-      .select("id, url, title, word_count, status, noindex, canonical_mismatch, in_sitemap, extracted")
+      .select("id, url, title, word_count, status, noindex, canonical_mismatch, in_sitemap, post_type, wp_post_id, extracted")
       .eq("site_id", site.id);
     const pageList = (pages ?? []) as PageRow[];
     const pageByUrl = new Map(pageList.map((p) => [p.url, p]));
