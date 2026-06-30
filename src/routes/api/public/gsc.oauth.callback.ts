@@ -12,7 +12,9 @@ export const Route = createFileRoute("/api/public/gsc/oauth/callback")({
 
         const forwardedHost = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
         const forwardedProto = request.headers.get("x-forwarded-proto") ?? url.protocol.replace(":", "");
-        const appOrigin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : url.origin;
+        const baseProto = forwardedProto.split(",")[0]?.trim() || "https";
+        const baseHost = forwardedHost?.split(",")[0]?.trim();
+        const appOrigin = baseHost ? `${baseProto}://${baseHost}` : url.origin;
         const fail = (msg: string) =>
           Response.redirect(
             `${appOrigin}/gsc/connect?gsc_error=${encodeURIComponent(msg)}`,
