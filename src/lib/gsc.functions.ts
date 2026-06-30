@@ -10,6 +10,27 @@ type GscRow = {
   position: number;
 };
 
+const GSC_GATEWAY_BASE = "https://connector-gateway.lovable.dev/google_search_console";
+
+function hasGscGatewayConnection(): boolean {
+  return Boolean(process.env.LOVABLE_API_KEY && process.env.GOOGLE_SEARCH_CONSOLE_API_KEY);
+}
+
+async function callGscGateway(path: string, init?: RequestInit): Promise<Response> {
+  const lovableKey = process.env.LOVABLE_API_KEY;
+  const connectionKey = process.env.GOOGLE_SEARCH_CONSOLE_API_KEY;
+  if (!lovableKey || !connectionKey) throw new Error("Google Search Console connector is not linked.");
+  const headers = new Headers(init?.headers);
+  headers.set("Authorization", `Bearer ${lovableKey}`);
+  headers.set("X-Connection-Api-Key", connectionKey);
+  const res = await fetch(`${GSC_GATEWAY_BASE}${path}`, { ...init, headers });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`GSC connector ${res.status}: ${t.slice(0, 200)}`);
+  }
+  return res;
+}
+
 // Legacy service-account JWT path (kept as fallback)
 async function getServiceAccountToken(): Promise<string | null> {
   const raw = process.env.GSC_SERVICE_ACCOUNT_JSON;
@@ -74,7 +95,7 @@ export const importGscData = createServerFn({ method: "POST" })
     // Prefer OAuth connection mapped to this site
     let property: string | null = null;
     let accessToken: string | null = null;
-    let source: "oauth" | "service_account" = "service_account";
+    let source: "oauth" | "service_account" | "connector" = "service_account";
 
     const { data: mapping } = await supabase
       .from("site_gsc_connections")
@@ -87,16 +108,27 @@ export const importGscData = createServerFn({ method: "POST" })
       | null;
 
     if (mapped?.gsc_properties) {
-      const { getFreshAccessToken } = await import("@/lib/google-tokens.server");
-      try {
-        accessToken = await getFreshAccessToken(supabaseAdmin, mapped.gsc_properties.connection_id);
-        property = mapped.gsc_properties.site_url;
-        source = "oauth";
-      } catch (e) {
-        return {
-          status: "not_connected" as const,
-          reason: `Google connection failed: ${e instanceof Error ? e.message : "unknown"}. Reconnect at /gsc/connect.`,
-        };
+      property = mapped.gsc_properties.site_url;
+
+      const { data: connection } = await supabase
+        .from("google_connections")
+        .select("status")
+        .eq("id", mapped.gsc_properties.connection_id)
+        .maybeSingle();
+
+      if (connection?.status === "connector" && hasGscGatewayConnection()) {
+        source = "connector";
+      } else {
+        const { getFreshAccessToken } = await import("@/lib/google-tokens.server");
+        try {
+          accessToken = await getFreshAccessToken(supabaseAdmin, mapped.gsc_properties.connection_id);
+          source = "oauth";
+        } catch (e) {
+          return {
+            status: "not_connected" as const,
+            reason: `Google connection failed: ${e instanceof Error ? e.message : "unknown"}. Reconnect at /gsc/connect.`,
+          };
+        }
       }
     } else if (site.gsc_property) {
       // Fallback: service account + manual property
@@ -135,14 +167,20 @@ export const importGscData = createServerFn({ method: "POST" })
           rowLimit,
           startRow,
         };
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify(body),
-        });
+        const res = source === "connector"
+          ? await callGscGateway(`/webmasters/v3/sites/${encoded}/searchAnalytics/query`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(body),
+            })
+          : await fetch(endpoint, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "content-type": "application/json",
+              },
+              body: JSON.stringify(body),
+            });
         if (!res.ok) {
           const t = await res.text();
           throw new Error(`GSC API ${res.status}: ${t.slice(0, 200)}`);

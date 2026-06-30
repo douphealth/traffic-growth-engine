@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -30,7 +30,16 @@ function GscConnectPage() {
   const errParam = params.get("gsc_error");
 
   useEffect(() => {
-    if (justConnected) toast.success("Google Search Console connected");
+    if (justConnected) {
+      const properties = params.get("properties");
+      const created = params.get("created");
+      const linked = params.get("linked");
+      toast.success(
+        properties
+          ? `Google connected — synced ${properties} propert${properties === "1" ? "y" : "ies"}, created ${created ?? "0"} site${created === "1" ? "" : "s"}, linked ${linked ?? "0"}.`
+          : "Google Search Console connected — syncing properties now.",
+      );
+    }
     if (errParam) toast.error(`Google OAuth failed: ${errParam}`);
   }, [justConnected, errParam]);
 
@@ -75,7 +84,20 @@ function GscConnectPage() {
         toast.error(r.reason);
         return;
       }
-      window.location.href = r.url;
+      if (r.mode === "connector") {
+        toast.success(
+          r.created + r.linked === 0
+            ? `Synced ${r.properties} Search Console propert${r.properties === 1 ? "y" : "ies"}.`
+            : `Auto-linked ${r.linked} propert${r.linked === 1 ? "y" : "ies"}` +
+                (r.created > 0 ? ` · created ${r.created} site${r.created === 1 ? "" : "s"}` : ""),
+        );
+        qc.invalidateQueries({ queryKey: ["google-connection"] });
+        qc.invalidateQueries({ queryKey: ["gsc-properties"] });
+        qc.invalidateQueries({ queryKey: ["sites-min"] });
+        qc.invalidateQueries({ queryKey: ["sites"] });
+        return;
+      }
+      if (r.mode === "oauth") window.location.href = r.url;
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -136,7 +158,7 @@ function GscConnectPage() {
     <>
       <PageHeader
         title="Google Search Console"
-        description="Connect your Google account to import real Search Console data. This is separate from your app login and only requires read-only access."
+        description="Connect Search Console once; AutoTraffic automatically discovers every property in that Google account, creates the sites, and links them for imports."
       />
       <PageBody>
         {!conn && (
@@ -144,8 +166,8 @@ function GscConnectPage() {
             <CardHeader>
               <CardTitle className="text-base">Connect Google Search Console</CardTitle>
               <CardDescription>
-                We&apos;ll request <code>webmasters.readonly</code> scope so we can list the
-                properties you own and import page/query data.
+                We&apos;ll request read-only Search Console access, then automatically create and
+                link every website/property available in that Google account.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -153,7 +175,8 @@ function GscConnectPage() {
                 <ShieldCheck className="h-4 w-4" />
                 <AlertTitle>Read-only access</AlertTitle>
                 <AlertDescription>
-                  Tokens are stored encrypted server-side. You can disconnect any time.
+                  This connector is separate from app login. Tokens are encrypted server-side and
+                  only used to list properties and import Search Console metrics.
                 </AlertDescription>
               </Alert>
               <div className="mt-4">
@@ -174,7 +197,7 @@ function GscConnectPage() {
                   <div>
                     <CardTitle className="text-base">Connected Google account</CardTitle>
                     <CardDescription>
-                      {conn.google_email ?? "Google account"} ·{" "}
+                      {conn.google_email ?? "Google Search Console connector"} ·{" "}
                       <Badge variant="secondary" className="capitalize">
                         {conn.status}
                       </Badge>
@@ -207,8 +230,8 @@ function GscConnectPage() {
               <CardHeader>
                 <CardTitle className="text-base">Your Search Console properties</CardTitle>
                 <CardDescription>
-                  Link a property to one of your connected WordPress sites. Imports will then pull
-                  real data from that property.
+                  These are auto-linked to site records. Manual linking below is only a repair tool
+                  if you intentionally want to override a mapping.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -218,8 +241,7 @@ function GscConnectPage() {
                 )}
                 {propsRes && propsRes.ok && properties.length === 0 && (
                   <p className="text-sm text-muted-foreground">
-                    No properties returned. Click &quot;Refresh properties&quot; to fetch them from
-                    Google.
+                    No properties returned yet. Click &quot;Refresh properties&quot; to sync from Google.
                   </p>
                 )}
                 {properties.length > 0 && (
@@ -238,17 +260,6 @@ function GscConnectPage() {
                       />
                     ))}
                   </div>
-                )}
-                {(sitesQ.data?.length ?? 0) === 0 && (
-                  <Alert className="mt-4">
-                    <AlertTitle>No WordPress sites yet</AlertTitle>
-                    <AlertDescription>
-                      <Link to="/sites/connect" className="underline">
-                        Connect a site
-                      </Link>{" "}
-                      first, then link a Search Console property to it here.
-                    </AlertDescription>
-                  </Alert>
                 )}
               </CardContent>
             </Card>

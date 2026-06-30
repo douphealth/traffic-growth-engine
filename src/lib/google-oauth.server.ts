@@ -28,11 +28,11 @@ export function newState(): string {
   return randomBytes(24).toString("base64url");
 }
 
-export function buildConsentUrl(state: string): string {
+export function buildConsentUrl(state: string, redirectUri?: string): string {
   const env = googleEnv();
   const params = new URLSearchParams({
     client_id: env.client_id,
-    redirect_uri: env.redirect_uri,
+    redirect_uri: redirectUri ?? env.redirect_uri,
     response_type: "code",
     scope: [GSC_SCOPE, ...ID_SCOPES].join(" "),
     access_type: "offline",
@@ -52,7 +52,10 @@ export type GoogleTokenResponse = {
   id_token?: string;
 };
 
-export async function exchangeCodeForTokens(code: string): Promise<GoogleTokenResponse> {
+export async function exchangeCodeForTokens(
+  code: string,
+  redirectUri?: string,
+): Promise<GoogleTokenResponse> {
   const env = googleEnv();
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -61,7 +64,7 @@ export async function exchangeCodeForTokens(code: string): Promise<GoogleTokenRe
       code,
       client_id: env.client_id,
       client_secret: env.client_secret,
-      redirect_uri: env.redirect_uri,
+      redirect_uri: redirectUri ?? env.redirect_uri,
       grant_type: "authorization_code",
     }),
   });
