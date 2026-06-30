@@ -10,12 +10,12 @@ type GscRow = {
   position: number;
 };
 
+// Legacy service-account JWT path (kept as fallback)
 async function getServiceAccountToken(): Promise<string | null> {
   const raw = process.env.GSC_SERVICE_ACCOUNT_JSON;
   if (!raw) return null;
   try {
     const sa = JSON.parse(raw) as { client_email: string; private_key: string };
-    // Build JWT (RS256) for OAuth assertion
     const header = { alg: "RS256", typ: "JWT" };
     const now = Math.floor(Date.now() / 1000);
     const claim = {
@@ -25,14 +25,10 @@ async function getServiceAccountToken(): Promise<string | null> {
       iat: now,
       exp: now + 3600,
     };
-    const b64 = (o: object) =>
-      Buffer.from(JSON.stringify(o)).toString("base64url");
+    const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
     const unsigned = `${b64(header)}.${b64(claim)}`;
     const { createSign } = await import("crypto");
-    const sig = createSign("RSA-SHA256")
-      .update(unsigned)
-      .sign(sa.private_key)
-      .toString("base64url");
+    const sig = createSign("RSA-SHA256").update(unsigned).sign(sa.private_key).toString("base64url");
     const assertion = `${unsigned}.${sig}`;
     const res = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
@@ -74,20 +70,56 @@ export const importGscData = createServerFn({ method: "POST" })
       .eq("id", data.site_id)
       .single();
     if (!site) throw new Error("Site not found");
-    if (!site.gsc_property) {
-      return { status: "not_connected" as const, reason: "No GSC property set on this site." };
-    }
-    const token = await getServiceAccountToken();
-    if (!token) {
+
+    // Prefer OAuth connection mapped to this site
+    let property: string | null = null;
+    let accessToken: string | null = null;
+    let source: "oauth" | "service_account" = "service_account";
+
+    const { data: mapping } = await supabase
+      .from("site_gsc_connections")
+      .select("gsc_property_id, gsc_properties:gsc_property_id (site_url, connection_id)")
+      .eq("site_id", site.id)
+      .maybeSingle();
+
+    const mapped = mapping as
+      | { gsc_property_id: string; gsc_properties: { site_url: string; connection_id: string } | null }
+      | null;
+
+    if (mapped?.gsc_properties) {
+      const { getFreshAccessToken } = await import("@/lib/google-tokens.server");
+      try {
+        accessToken = await getFreshAccessToken(supabaseAdmin, mapped.gsc_properties.connection_id);
+        property = mapped.gsc_properties.site_url;
+        source = "oauth";
+      } catch (e) {
+        return {
+          status: "not_connected" as const,
+          reason: `Google connection failed: ${e instanceof Error ? e.message : "unknown"}. Reconnect at /gsc/connect.`,
+        };
+      }
+    } else if (site.gsc_property) {
+      // Fallback: service account + manual property
+      const sa = await getServiceAccountToken();
+      if (!sa) {
+        return {
+          status: "not_connected" as const,
+          reason:
+            "No Google Search Console connection. Connect via /gsc/connect and link this site to a property.",
+        };
+      }
+      accessToken = sa;
+      property = site.gsc_property;
+    } else {
       return {
         status: "not_connected" as const,
         reason:
-          "Google Search Console service account is not configured. Add a GSC_SERVICE_ACCOUNT_JSON secret and share the property with the service account email.",
+          "This site has no Search Console property. Connect Google at /gsc/connect and select a property.",
       };
     }
 
-    const property = encodeURIComponent(site.gsc_property);
-    const endpoint = `https://searchconsole.googleapis.com/webmasters/v3/sites/${property}/searchAnalytics/query`;
+    const encoded = encodeURIComponent(property!);
+    const endpoint = `https://www.googleapis.com/webmasters/v3/sites/${encoded}/searchAnalytics/query`;
     let totalRows = 0;
 
     for (const win of WINDOWS) {
@@ -106,7 +138,7 @@ export const importGscData = createServerFn({ method: "POST" })
         const res = await fetch(endpoint, {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${accessToken}`,
             "content-type": "application/json",
           },
           body: JSON.stringify(body),
@@ -139,7 +171,7 @@ export const importGscData = createServerFn({ method: "POST" })
         totalRows += rows.length;
         if (rows.length < rowLimit) break;
         startRow += rowLimit;
-        if (startRow > 250000) break; // safety
+        if (startRow > 250000) break;
       }
     }
 
@@ -150,8 +182,8 @@ export const importGscData = createServerFn({ method: "POST" })
       action: "gsc.import",
       entity_type: "site",
       entity_id: site.id,
-      after: { rows: totalRows },
+      after: { rows: totalRows, source, property },
     });
 
-    return { status: "ok" as const, rows: totalRows };
+    return { status: "ok" as const, rows: totalRows, source, property };
   });

@@ -1,0 +1,296 @@
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { PageBody, PageHeader } from "@/components/page-header";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, Link2, RefreshCw, LogOut, ShieldCheck, ExternalLink } from "lucide-react";
+import {
+  startGscOAuth,
+  listGscProperties,
+  connectGscPropertyToSite,
+  disconnectGoogle,
+  getGoogleConnection,
+} from "@/lib/gsc-oauth.functions";
+import { supabase } from "@/integrations/supabase/client";
+
+export const Route = createFileRoute("/_authenticated/gsc/connect")({
+  component: GscConnectPage,
+});
+
+function GscConnectPage() {
+  const qc = useQueryClient();
+  const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  const justConnected = params.get("gsc") === "connected";
+  const errParam = params.get("gsc_error");
+
+  useEffect(() => {
+    if (justConnected) toast.success("Google Search Console connected");
+    if (errParam) toast.error(`Google OAuth failed: ${errParam}`);
+  }, [justConnected, errParam]);
+
+  const connQ = useQuery({
+    queryKey: ["google-connection"],
+    queryFn: () => getGoogleConnection(),
+  });
+
+  const propsQ = useQuery({
+    queryKey: ["gsc-properties"],
+    queryFn: () => listGscProperties({ data: { refresh: false } }),
+    enabled: !!connQ.data,
+  });
+
+  const sitesQ = useQuery({
+    queryKey: ["sites-min"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sites")
+        .select("id, name, base_url")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const mappingsQ = useQuery({
+    queryKey: ["site-gsc-mappings"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("site_gsc_connections")
+        .select("site_id, gsc_property_id");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const start = useMutation({
+    mutationFn: () => startGscOAuth({ data: { redirect_after: "/gsc/connect" } }),
+    onSuccess: (r) => {
+      if (!r.ok) {
+        toast.error(r.reason);
+        return;
+      }
+      window.location.href = r.url;
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const refresh = useMutation({
+    mutationFn: () => listGscProperties({ data: { refresh: true } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["gsc-properties"] });
+      toast.success("Property list refreshed");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const disc = useMutation({
+    mutationFn: () => disconnectGoogle(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["google-connection"] });
+      qc.invalidateQueries({ queryKey: ["gsc-properties"] });
+      toast.success("Disconnected");
+    },
+  });
+
+  const conn = connQ.data;
+  const propsRes = propsQ.data;
+  const properties = propsRes && propsRes.ok ? propsRes.properties : [];
+
+  return (
+    <>
+      <PageHeader
+        title="Google Search Console"
+        description="Connect your Google account to import real Search Console data. This is separate from your app login and only requires read-only access."
+      />
+      <PageBody>
+        {!conn && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Connect Google Search Console</CardTitle>
+              <CardDescription>
+                We&apos;ll request <code>webmasters.readonly</code> scope so we can list the
+                properties you own and import page/query data.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Alert>
+                <ShieldCheck className="h-4 w-4" />
+                <AlertTitle>Read-only access</AlertTitle>
+                <AlertDescription>
+                  Tokens are stored encrypted server-side. You can disconnect any time.
+                </AlertDescription>
+              </Alert>
+              <div className="mt-4">
+                <Button onClick={() => start.mutate()} disabled={start.isPending}>
+                  {start.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                  Connect Google
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {conn && (
+          <>
+            <Card>
+              <CardHeader>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base">Connected Google account</CardTitle>
+                    <CardDescription>
+                      {conn.google_email ?? "Google account"} ·{" "}
+                      <Badge variant="secondary" className="capitalize">
+                        {conn.status}
+                      </Badge>
+                    </CardDescription>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => refresh.mutate()}
+                      disabled={refresh.isPending}
+                    >
+                      <RefreshCw className={`mr-1 h-3 w-3 ${refresh.isPending ? "animate-spin" : ""}`} />
+                      Refresh properties
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => disc.mutate()}
+                      disabled={disc.isPending}
+                    >
+                      <LogOut className="mr-1 h-3 w-3" /> Disconnect
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Your Search Console properties</CardTitle>
+                <CardDescription>
+                  Link a property to one of your connected WordPress sites. Imports will then pull
+                  real data from that property.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {propsQ.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+                {propsRes && !propsRes.ok && (
+                  <p className="text-sm text-destructive">{propsRes.reason}</p>
+                )}
+                {propsRes && propsRes.ok && properties.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    No properties returned. Click &quot;Refresh properties&quot; to fetch them from
+                    Google.
+                  </p>
+                )}
+                {properties.length > 0 && (
+                  <div className="divide-y divide-border rounded-md border border-border">
+                    {properties.map((p: any) => (
+                      <PropertyRow
+                        key={p.id}
+                        prop={p}
+                        sites={sitesQ.data ?? []}
+                        mappings={mappingsQ.data ?? []}
+                        onConnected={() => {
+                          qc.invalidateQueries({ queryKey: ["site-gsc-mappings"] });
+                          qc.invalidateQueries({ queryKey: ["sites"] });
+                          qc.invalidateQueries({ queryKey: ["gsc-properties"] });
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+                {(sitesQ.data?.length ?? 0) === 0 && (
+                  <Alert className="mt-4">
+                    <AlertTitle>No WordPress sites yet</AlertTitle>
+                    <AlertDescription>
+                      <Link to="/sites/connect" className="underline">
+                        Connect a site
+                      </Link>{" "}
+                      first, then link a Search Console property to it here.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </PageBody>
+    </>
+  );
+}
+
+function PropertyRow({
+  prop,
+  sites,
+  mappings,
+  onConnected,
+}: {
+  prop: { id: string; site_url: string; permission_level: string | null };
+  sites: { id: string; name: string; base_url: string }[];
+  mappings: { site_id: string; gsc_property_id: string }[];
+  onConnected: () => void;
+}) {
+  const linkedSiteId = mappings.find((m) => m.gsc_property_id === prop.id)?.site_id;
+  const [selected, setSelected] = useState<string>(linkedSiteId ?? "");
+
+  const link = useMutation({
+    mutationFn: () =>
+      connectGscPropertyToSite({ data: { site_id: selected, gsc_property_id: prop.id } }),
+    onSuccess: () => {
+      toast.success("Property linked");
+      onConnected();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <div className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 text-sm font-medium truncate">
+          <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />
+          <span className="truncate">{prop.site_url}</span>
+        </div>
+        <div className="text-[11px] text-muted-foreground">
+          {prop.permission_level ?? "—"}
+          {linkedSiteId && (
+            <>
+              {" · "}
+              <span className="text-success">linked</span>
+            </>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Select value={selected} onValueChange={setSelected}>
+          <SelectTrigger className="h-8 w-[220px]">
+            <SelectValue placeholder="Choose a WordPress site" />
+          </SelectTrigger>
+          <SelectContent>
+            {sites.map((s) => (
+              <SelectItem key={s.id} value={s.id}>
+                {s.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          size="sm"
+          disabled={!selected || link.isPending}
+          onClick={() => link.mutate()}
+        >
+          {link.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Link2 className="mr-1 h-3 w-3" />}
+          Link
+        </Button>
+      </div>
+    </div>
+  );
+}

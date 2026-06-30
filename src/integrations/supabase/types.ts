@@ -548,6 +548,41 @@ export type Database = {
           },
         ]
       }
+      encrypted_google_tokens: {
+        Row: {
+          ciphertext: string
+          connection_id: string
+          created_at: string
+          id: string
+          token_kind: string
+          updated_at: string
+        }
+        Insert: {
+          ciphertext: string
+          connection_id: string
+          created_at?: string
+          id?: string
+          token_kind: string
+          updated_at?: string
+        }
+        Update: {
+          ciphertext?: string
+          connection_id?: string
+          created_at?: string
+          id?: string
+          token_kind?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "encrypted_google_tokens_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "google_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       encrypted_site_secrets: {
         Row: {
           ciphertext: string
@@ -706,6 +741,88 @@ export type Database = {
           },
         ]
       }
+      google_connections: {
+        Row: {
+          connected_at: string
+          google_email: string | null
+          id: string
+          last_refreshed_at: string | null
+          org_id: string
+          scopes: string[]
+          status: string
+          user_id: string
+        }
+        Insert: {
+          connected_at?: string
+          google_email?: string | null
+          id?: string
+          last_refreshed_at?: string | null
+          org_id: string
+          scopes?: string[]
+          status?: string
+          user_id: string
+        }
+        Update: {
+          connected_at?: string
+          google_email?: string | null
+          id?: string
+          last_refreshed_at?: string | null
+          org_id?: string
+          scopes?: string[]
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_connections_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      google_oauth_states: {
+        Row: {
+          consumed_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          org_id: string
+          redirect_after: string | null
+          state: string
+          user_id: string
+        }
+        Insert: {
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          org_id: string
+          redirect_after?: string | null
+          state: string
+          user_id: string
+        }
+        Update: {
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          org_id?: string
+          redirect_after?: string | null
+          state?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_oauth_states_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gsc_page_query_daily: {
         Row: {
           clicks: number | null
@@ -752,6 +869,51 @@ export type Database = {
             columns: ["site_id"]
             isOneToOne: false
             referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gsc_properties: {
+        Row: {
+          connection_id: string
+          id: string
+          last_seen_at: string
+          org_id: string
+          permission_level: string | null
+          selected: boolean
+          site_url: string
+        }
+        Insert: {
+          connection_id: string
+          id?: string
+          last_seen_at?: string
+          org_id: string
+          permission_level?: string | null
+          selected?: boolean
+          site_url: string
+        }
+        Update: {
+          connection_id?: string
+          id?: string
+          last_seen_at?: string
+          org_id?: string
+          permission_level?: string | null
+          selected?: boolean
+          site_url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gsc_properties_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "google_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gsc_properties_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -1621,6 +1783,42 @@ export type Database = {
           },
         ]
       }
+      site_gsc_connections: {
+        Row: {
+          connected_at: string
+          gsc_property_id: string
+          id: string
+          site_id: string
+        }
+        Insert: {
+          connected_at?: string
+          gsc_property_id: string
+          id?: string
+          site_id: string
+        }
+        Update: {
+          connected_at?: string
+          gsc_property_id?: string
+          id?: string
+          site_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_gsc_connections_gsc_property_id_fkey"
+            columns: ["gsc_property_id"]
+            isOneToOne: false
+            referencedRelation: "gsc_properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_gsc_connections_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: true
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       site_rules: {
         Row: {
           created_at: string
@@ -1894,11 +2092,24 @@ export type Database = {
       }
       is_org_admin: { Args: { _org_id: string }; Returns: boolean }
       is_org_member: { Args: { _org_id: string }; Returns: boolean }
+      read_google_token: {
+        Args: { _connection_id: string; _key: string; _kind: string }
+        Returns: string
+      }
       read_site_secret: {
         Args: { _key: string; _kind: string; _site_id: string }
         Returns: string
       }
       site_org: { Args: { _site_id: string }; Returns: string }
+      write_google_token: {
+        Args: {
+          _connection_id: string
+          _key: string
+          _kind: string
+          _plain: string
+        }
+        Returns: string
+      }
       write_site_secret: {
         Args: { _key: string; _kind: string; _plain: string; _site_id: string }
         Returns: string

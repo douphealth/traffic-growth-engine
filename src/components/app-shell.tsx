@@ -16,6 +16,7 @@ import {
   Send,
   Code2,
   TrendingUp,
+  Search as SearchIcon,
 } from "lucide-react";
 import {
   Sidebar,
@@ -53,6 +54,7 @@ const primary = [
 ] as const;
 
 const secondary = [
+  { title: "GSC Connector", to: "/gsc/connect", icon: SearchIcon },
   { title: "Validation", to: "/validation", icon: ShieldCheck },
   { title: "Publishing Queue", to: "/publishing", icon: Send },
   { title: "Schema", to: "/schema", icon: Code2 },
