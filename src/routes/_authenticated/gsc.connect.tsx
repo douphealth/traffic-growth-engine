@@ -97,7 +97,7 @@ function GscConnectPage() {
         qc.invalidateQueries({ queryKey: ["sites"] });
         return;
       }
-      window.location.href = r.url;
+      if (r.mode === "oauth") window.location.href = r.url;
     },
     onError: (e: Error) => toast.error(e.message),
   });
