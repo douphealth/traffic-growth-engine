@@ -10,7 +10,9 @@ import { ArrowRight, FileEdit, Loader2, Target, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { scoreOpportunities } from "@/lib/opportunities.functions";
+import { syncPagesFromGsc, importAllConnectedGscProperties } from "@/lib/gsc-pages.functions";
 import { toast } from "sonner";
+
 
 export const Route = createFileRoute("/_authenticated/opportunities")({
   component: OpportunityBoard,
