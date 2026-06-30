@@ -1,66 +1,81 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageBody, PageHeader } from "@/components/page-header";
+import { PageBody, PageHeader, EmptyState } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { mockAiPrompts } from "@/lib/mock-data";
-import { Sparkles, Plus } from "lucide-react";
+import { Sparkles } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/_authenticated/ai-visibility")({
   component: AIVisibilityPage,
 });
 
 function AIVisibilityPage() {
+  const q = useQuery({
+    queryKey: ["ai-visibility"],
+    queryFn: async () => {
+      const [prompts, runs] = await Promise.all([
+        supabase.from("ai_visibility_prompts").select("id, prompt, active").eq("active", true),
+        supabase.from("ai_visibility_runs").select("prompt_id, brand_mentioned, competitor_mentions, model"),
+      ]);
+      if (prompts.error) throw prompts.error;
+      if (runs.error) throw runs.error;
+      return { prompts: prompts.data ?? [], runs: runs.data ?? [] };
+    },
+  });
+
+  const prompts = q.data?.prompts ?? [];
+  const runs = q.data?.runs ?? [];
+  const totalRuns = runs.length;
+  const brandHits = runs.filter((r: any) => r.brand_mentioned).length;
+  const compHits = runs.filter((r: any) => Array.isArray(r.competitor_mentions) && r.competitor_mentions.length > 0).length;
+
   return (
     <>
       <PageHeader
         title="AI Visibility"
-        description="Monitor whether AI assistants cite or recommend your brand and URLs for relevant prompts. Monitoring only — never claim improvement unless measured."
-        actions={
-          <Button>
-            <Plus className="mr-1.5 h-3.5 w-3.5" /> Add prompt
-          </Button>
-        }
+        description="Monitor whether AI assistants cite or recommend your brand. Monitoring only — no claims of improvement without measurement."
       />
       <PageBody>
         <div className="grid gap-3 md:grid-cols-3">
-          <Stat title="Tracked prompts" value="24" />
-          <Stat title="Brand citation rate" value="18%" sub="across 3 models · mock" />
-          <Stat title="Competitor citation rate" value="64%" sub="across 3 models · mock" />
+          <Stat title="Tracked prompts" value={prompts.length.toString()} />
+          <Stat title="Brand citation rate" value={totalRuns ? `${Math.round((brandHits / totalRuns) * 100)}%` : "—"} sub={`${brandHits} / ${totalRuns} runs`} />
+          <Stat title="Competitor citation rate" value={totalRuns ? `${Math.round((compHits / totalRuns) * 100)}%` : "—"} sub={`${compHits} / ${totalRuns} runs`} />
         </div>
 
-        <div className="space-y-2">
-          {mockAiPrompts.map((p) => {
-            const rate = Math.round((p.brand_cited / p.runs) * 100);
-            return (
-              <Card key={p.id}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <Sparkles className="h-3.5 w-3.5 text-primary" />
-                        {p.prompt}
-                      </CardTitle>
-                      <CardDescription className="text-xs mt-1">
-                        {p.runs} runs across openai/anthropic/google · mock
-                      </CardDescription>
+        {prompts.length === 0 ? (
+          <EmptyState
+            title="No tracked prompts yet"
+            description="AI visibility polling is not enabled in this build. Tracked prompts and polling runs will appear here once configured."
+          />
+        ) : (
+          <div className="space-y-2">
+            {prompts.map((p: any) => {
+              const pr = runs.filter((r: any) => r.prompt_id === p.id);
+              const brand = pr.filter((r: any) => r.brand_mentioned).length;
+              const rate = pr.length ? Math.round((brand / pr.length) * 100) : 0;
+              return (
+                <Card key={p.id}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <Sparkles className="h-3.5 w-3.5 text-primary" />
+                          {p.prompt}
+                        </CardTitle>
+                        <CardDescription className="text-xs mt-1">{pr.length} runs</CardDescription>
+                      </div>
+                      <Badge variant="outline">{rate}% brand cited</Badge>
                     </div>
-                    <Badge
-                      variant="outline"
-                      className={rate >= 50 ? "border-success/40 text-success" : rate >= 20 ? "border-warning/40 text-warning" : "border-destructive/40 text-destructive"}
-                    >
-                      {rate}% brand cited
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="text-xs text-muted-foreground flex gap-4">
-                  <span>Brand cited: <span className="text-foreground font-medium">{p.brand_cited}/{p.runs}</span></span>
-                  <span>Competitor cited: <span className="text-foreground font-medium">{p.competitor_cited}/{p.runs}</span></span>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                  </CardHeader>
+                  <CardContent className="text-xs text-muted-foreground">
+                    Brand cited: <span className="text-foreground font-medium">{brand}/{pr.length}</span>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </PageBody>
     </>
   );

@@ -1,15 +1,29 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageBody, PageHeader } from "@/components/page-header";
+import { PageBody, PageHeader, EmptyState } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { mockMonetization } from "@/lib/mock-data";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/_authenticated/monetization")({
   component: MonetizationPage,
 });
 
 function MonetizationPage() {
+  const q = useQuery({
+    queryKey: ["monetization"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("monetization_opportunities")
+        .select("id, kind, description, status, page_id, pages(url)")
+        .eq("status", "open")
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   return (
     <>
       <PageHeader
@@ -17,36 +31,37 @@ function MonetizationPage() {
         description="Safe affiliate fixes only: disclosures, tracked outbound links, comparison-table CTAs. Never invents revenue, reviews, or merchant claims."
       />
       <PageBody>
-        <Card>
-          <CardContent className="p-0">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/30 text-xs text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2.5 text-left font-medium">Page</th>
-                  <th className="px-4 py-2.5 text-left font-medium">Issue</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Severity</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mockMonetization.map((m, i) => (
-                  <tr key={i} className="border-t border-border">
-                    <td className="px-4 py-3 truncate max-w-[260px]">{m.page_url}</td>
-                    <td className="px-4 py-3">{m.issue}</td>
-                    <td className="px-4 py-3 text-right">
-                      <Badge variant="outline" className={m.severity >= 4 ? "border-destructive/40 text-destructive" : m.severity >= 3 ? "border-warning/40 text-warning" : ""}>
-                        {m.severity}/5
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Button size="sm" variant="outline">Generate fix</Button>
-                    </td>
+        {q.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {q.data && q.data.length === 0 && (
+          <EmptyState
+            title="No monetization opportunities yet"
+            description="These are detected when opportunity scoring runs against pages with affiliate links. Run scoring on a site to populate this list."
+          />
+        )}
+        {q.data && q.data.length > 0 && (
+          <Card>
+            <CardContent className="p-0">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/30 text-xs text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left font-medium">Page</th>
+                    <th className="px-4 py-2.5 text-left font-medium">Kind</th>
+                    <th className="px-4 py-2.5 text-left font-medium">Description</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
+                </thead>
+                <tbody>
+                  {q.data.map((m: any) => (
+                    <tr key={m.id} className="border-t border-border">
+                      <td className="px-4 py-3 truncate max-w-[320px]">{m.pages?.url ?? "—"}</td>
+                      <td className="px-4 py-3"><Badge variant="outline">{m.kind}</Badge></td>
+                      <td className="px-4 py-3 text-muted-foreground">{m.description ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        )}
       </PageBody>
     </>
   );
