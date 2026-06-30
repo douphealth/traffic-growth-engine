@@ -213,6 +213,22 @@ export const importGscData = createServerFn({ method: "POST" })
       }
     }
 
+    // Chain: discover pages from GSC URLs, then score opportunities.
+    let pagesResult = { discovered: 0, inserted: 0, updated: 0 };
+    let oppsResult = { inserted: 0, by_type: {} as Record<string, number> };
+    try {
+      const { syncPagesFromGsc } = await import("@/lib/gsc-pages.functions");
+      pagesResult = await syncPagesFromGsc({ data: { site_id: site.id } });
+    } catch (e) {
+      console.error("syncPagesFromGsc failed", e);
+    }
+    try {
+      const { scoreOpportunities } = await import("@/lib/opportunities.functions");
+      oppsResult = await scoreOpportunities({ data: { site_id: site.id } });
+    } catch (e) {
+      console.error("scoreOpportunities failed", e);
+    }
+
     await supabase.from("audit_logs").insert({
       org_id: site.org_id,
       site_id: site.id,
@@ -220,8 +236,23 @@ export const importGscData = createServerFn({ method: "POST" })
       action: "gsc.import",
       entity_type: "site",
       entity_id: site.id,
-      after: { rows: totalRows, source, property },
+      after: {
+        rows: totalRows,
+        source,
+        property,
+        pages: pagesResult,
+        opportunities: oppsResult.inserted,
+      },
     });
 
-    return { status: "ok" as const, rows: totalRows, source, property };
+    return {
+      status: "ok" as const,
+      rows: totalRows,
+      source,
+      property,
+      pages: pagesResult,
+      opportunities: oppsResult.inserted,
+      opportunities_by_type: oppsResult.by_type,
+    };
   });
+
