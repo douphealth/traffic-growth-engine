@@ -164,10 +164,12 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
       const prev = aggPrev.get(p.url) ?? { clicks: 0, impressions: 0, positionSum: 0, positionN: 0 };
       const avgPos = a.positionN ? a.positionSum / a.positionN : null;
       const ctr = a.impressions ? a.clicks / a.impressions : 0;
+      const hasWpContent = p.wp_post_id != null || p.post_type !== "gsc_url" && p.extracted != null;
       const hasSchema = (p.extracted?.schema_jsonld?.length ?? 0) > 0;
       const hasAffiliate = (p.extracted?.affiliate_links?.length ?? 0) > 0;
       const inbound = inboundCount.get(p.url) ?? 0;
       const upside = clamp((a.impressions / 50) + a.clicks / 5);
+
 
       // CTR leak: pos<=10 and ctr < expected*0.7
       if (avgPos != null && avgPos <= 10 && a.impressions >= 200) {
