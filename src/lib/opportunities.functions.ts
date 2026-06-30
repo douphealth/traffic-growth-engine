@@ -269,8 +269,8 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
         });
       }
 
-      // Internal link gap
-      if (inbound === 0 && (a.impressions > 50 || (p.word_count ?? 0) > 800)) {
+      // Internal link gap (requires WP content)
+      if (hasWpContent && inbound === 0 && (a.impressions > 50 || (p.word_count ?? 0) > 800)) {
         opps.push({
           site_id: site.id,
           page_id: p.id,
@@ -292,8 +292,8 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
         });
       }
 
-      // Schema gap
-      if (!hasSchema && a.impressions >= 100) {
+      // Schema gap (requires WP content)
+      if (hasWpContent && !hasSchema && a.impressions >= 100) {
         opps.push({
           site_id: site.id,
           page_id: p.id,
@@ -315,8 +315,8 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
         });
       }
 
-      // AI answer gap (long-form, no h2-driven FAQ-style summary)
-      if ((p.word_count ?? 0) > 1200 && a.impressions >= 50) {
+      // AI answer gap (requires WP content + word count)
+      if (hasWpContent && (p.word_count ?? 0) > 1200 && a.impressions >= 50) {
         opps.push({
           site_id: site.id,
           page_id: p.id,
@@ -338,8 +338,8 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
         });
       }
 
-      // Monetization leak
-      if (!hasAffiliate && a.clicks >= 30) {
+      // Monetization leak (requires WP content)
+      if (hasWpContent && !hasAffiliate && a.clicks >= 30) {
         opps.push({
           site_id: site.id,
           page_id: p.id,
@@ -361,6 +361,7 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
         });
       }
     }
+
 
     // Cannibalization across pages
     for (const [query, urls] of urlsByQuery) {
