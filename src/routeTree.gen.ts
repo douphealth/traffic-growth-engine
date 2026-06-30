@@ -27,6 +27,7 @@ import { Route as AuthenticatedContentRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedAiVisibilityRouteImport } from './routes/_authenticated/ai-visibility'
 import { Route as AuthenticatedSitesIndexRouteImport } from './routes/_authenticated/sites.index'
 import { Route as AuthenticatedSitesConnectRouteImport } from './routes/_authenticated/sites.connect'
+import { Route as AuthenticatedGscConnectRouteImport } from './routes/_authenticated/gsc.connect'
 import { Route as ApiPublicGscOauthCallbackRouteImport } from './routes/api/public/gsc.oauth.callback'
 
 const AuthRoute = AuthRouteImport.update({
@@ -124,6 +125,11 @@ const AuthenticatedSitesConnectRoute =
     path: '/sites/connect',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedGscConnectRoute = AuthenticatedGscConnectRouteImport.update({
+  id: '/gsc/connect',
+  path: '/gsc/connect',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const ApiPublicGscOauthCallbackRoute =
   ApiPublicGscOauthCallbackRouteImport.update({
     id: '/api/public/gsc/oauth/callback',
@@ -147,6 +153,7 @@ export interface FileRoutesByFullPath {
   '/schema': typeof AuthenticatedSchemaRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/validation': typeof AuthenticatedValidationRoute
+  '/gsc/connect': typeof AuthenticatedGscConnectRoute
   '/sites/connect': typeof AuthenticatedSitesConnectRoute
   '/sites/': typeof AuthenticatedSitesIndexRoute
   '/api/public/gsc/oauth/callback': typeof ApiPublicGscOauthCallbackRoute
@@ -167,6 +174,7 @@ export interface FileRoutesByTo {
   '/schema': typeof AuthenticatedSchemaRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/validation': typeof AuthenticatedValidationRoute
+  '/gsc/connect': typeof AuthenticatedGscConnectRoute
   '/sites/connect': typeof AuthenticatedSitesConnectRoute
   '/sites': typeof AuthenticatedSitesIndexRoute
   '/api/public/gsc/oauth/callback': typeof ApiPublicGscOauthCallbackRoute
@@ -189,6 +197,7 @@ export interface FileRoutesById {
   '/_authenticated/schema': typeof AuthenticatedSchemaRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/validation': typeof AuthenticatedValidationRoute
+  '/_authenticated/gsc/connect': typeof AuthenticatedGscConnectRoute
   '/_authenticated/sites/connect': typeof AuthenticatedSitesConnectRoute
   '/_authenticated/sites/': typeof AuthenticatedSitesIndexRoute
   '/api/public/gsc/oauth/callback': typeof ApiPublicGscOauthCallbackRoute
@@ -211,6 +220,7 @@ export interface FileRouteTypes {
     | '/schema'
     | '/settings'
     | '/validation'
+    | '/gsc/connect'
     | '/sites/connect'
     | '/sites/'
     | '/api/public/gsc/oauth/callback'
@@ -231,6 +241,7 @@ export interface FileRouteTypes {
     | '/schema'
     | '/settings'
     | '/validation'
+    | '/gsc/connect'
     | '/sites/connect'
     | '/sites'
     | '/api/public/gsc/oauth/callback'
@@ -252,6 +263,7 @@ export interface FileRouteTypes {
     | '/_authenticated/schema'
     | '/_authenticated/settings'
     | '/_authenticated/validation'
+    | '/_authenticated/gsc/connect'
     | '/_authenticated/sites/connect'
     | '/_authenticated/sites/'
     | '/api/public/gsc/oauth/callback'
@@ -392,6 +404,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSitesConnectRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/gsc/connect': {
+      id: '/_authenticated/gsc/connect'
+      path: '/gsc/connect'
+      fullPath: '/gsc/connect'
+      preLoaderRoute: typeof AuthenticatedGscConnectRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/public/gsc/oauth/callback': {
       id: '/api/public/gsc/oauth/callback'
       path: '/api/public/gsc/oauth/callback'
@@ -416,6 +435,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSchemaRoute: typeof AuthenticatedSchemaRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedValidationRoute: typeof AuthenticatedValidationRoute
+  AuthenticatedGscConnectRoute: typeof AuthenticatedGscConnectRoute
   AuthenticatedSitesConnectRoute: typeof AuthenticatedSitesConnectRoute
   AuthenticatedSitesIndexRoute: typeof AuthenticatedSitesIndexRoute
 }
@@ -434,6 +454,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSchemaRoute: AuthenticatedSchemaRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedValidationRoute: AuthenticatedValidationRoute,
+  AuthenticatedGscConnectRoute: AuthenticatedGscConnectRoute,
   AuthenticatedSitesConnectRoute: AuthenticatedSitesConnectRoute,
   AuthenticatedSitesIndexRoute: AuthenticatedSitesIndexRoute,
 }

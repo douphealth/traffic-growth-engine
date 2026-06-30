@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/page-header";
-import { Plus, ExternalLink, Download, MapPin, BarChart3, Loader2, Target, RefreshCw } from "lucide-react";
+import { Plus, ExternalLink, Download, MapPin, BarChart3, Loader2, Target, RefreshCw, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -185,10 +185,20 @@ function SiteCard({ site, onChanged }: { site: SiteRow; onChanged: () => void })
             Crawl sitemap
           </Button>
           <Button
+            asChild
+            variant="outline"
+            size="sm"
+          >
+            <Link to="/gsc/connect">
+              <Search className="mr-1 h-3 w-3" />
+              {site.gsc_property ? "Manage GSC" : "Connect GSC"}
+            </Link>
+          </Button>
+          <Button
             variant="outline"
             size="sm"
             disabled={busy !== null || !site.gsc_property}
-            title={!site.gsc_property ? "Add a GSC property to this site first." : undefined}
+            title={!site.gsc_property ? "Link a Search Console property at /gsc/connect first." : undefined}
             onClick={run(
               "gsc",
               () => importGscData({ data: { site_id: site.id } }),

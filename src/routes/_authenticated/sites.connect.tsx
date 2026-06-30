@@ -82,10 +82,12 @@ function ConnectSitePage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Analytics & SEO sources</CardTitle>
-              <CardDescription>Optional now — required to import GSC data and score opportunities accurately.</CardDescription>
+              <CardDescription>
+                Google Search Console is now connected via OAuth — go to <span className="font-medium">GSC Connector</span> after saving to pick a property. The field below is only used for the legacy service-account fallback.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Field id="gsc_property" label="Google Search Console property" placeholder="sc-domain:example.com" value={form.gsc_property} onChange={(v) => set("gsc_property", v)} />
+              <Field id="gsc_property" label="Google Search Console property (advanced / manual)" placeholder="sc-domain:example.com" value={form.gsc_property} onChange={(v) => set("gsc_property", v)} />
               <Field id="ga4_property_id" label="GA4 property ID" placeholder="properties/123456789" value={form.ga4_property_id} onChange={(v) => set("ga4_property_id", v)} />
               <Field id="sitemap_url" label="Sitemap URL" placeholder="https://example.com/sitemap_index.xml" value={form.sitemap_url} onChange={(v) => set("sitemap_url", v)} />
             </CardContent>
