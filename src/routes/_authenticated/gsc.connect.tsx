@@ -145,6 +145,30 @@ function GscConnectPage() {
   const propsRes = propsQ.data;
   const properties = propsRes && propsRes.ok ? propsRes.properties : [];
 
+  const diagQ = useQuery({
+    queryKey: ["gsc-diagnostics"],
+    queryFn: () => getGscDiagnostics(),
+    refetchOnWindowFocus: false,
+  });
+
+  const importAll = useMutation({
+    mutationFn: () => importAllConnectedGscProperties(),
+    onSuccess: (r) => {
+      toast.success(
+        `Imported ${r.totals.rows} rows · ${r.totals.urls} URLs · ${r.totals.pages} pages · ${r.totals.opportunities} opportunities across ${r.processed} site${r.processed === 1 ? "" : "s"}.`,
+      );
+      const failures = r.results.filter((x) => !x.ok);
+      if (failures.length) {
+        toast.error(`${failures.length} site${failures.length === 1 ? "" : "s"} failed — see diagnostics.`);
+      }
+      qc.invalidateQueries({ queryKey: ["gsc-diagnostics"] });
+      qc.invalidateQueries({ queryKey: ["opportunities"] });
+      qc.invalidateQueries({ queryKey: ["sites"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+
   // Auto-link once properties are loaded and we have at least one unlinked property.
   useEffect(() => {
     if (!propsRes || !propsRes.ok) return;
