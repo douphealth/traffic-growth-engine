@@ -129,6 +129,42 @@ function OpportunityBoard() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // Diagnostic: are there GSC rows but zero opportunities? (suggests pages weren't synced)
+  const gscRowsQ = useQuery({
+    queryKey: ["gsc-rows-count"],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("gsc_page_query_daily")
+        .select("site_id", { count: "exact", head: true });
+      return count ?? 0;
+    },
+  });
+
+  const repair = useMutation({
+    mutationFn: async () => {
+      const sites = sitesQ.data ?? [];
+      const targets = siteId === "all" ? sites : sites.filter((s) => s.id === siteId);
+      if (!targets.length) {
+        const r = await importAllConnectedGscProperties();
+        return { mode: "import_all" as const, opps: r.totals.opportunities };
+      }
+      let opps = 0;
+      for (const s of targets) {
+        await syncPagesFromGsc({ data: { site_id: s.id } });
+        const r = await scoreOpportunities({ data: { site_id: s.id } });
+        opps += r.inserted;
+      }
+      return { mode: "rescore" as const, opps };
+    },
+    onSuccess: (r) => {
+      toast.success(`Repair complete — ${r.opps} opportunities generated.`);
+      qc.invalidateQueries({ queryKey: ["opportunities"] });
+      qc.invalidateQueries({ queryKey: ["gsc-rows-count"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+
   return (
     <>
       <PageHeader
