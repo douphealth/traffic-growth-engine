@@ -76,7 +76,7 @@ function AppSidebar() {
           {!collapsed && (
             <div className="flex flex-col">
               <span className="text-sm font-semibold tracking-tight">AutoTraffic AI</span>
-              <span className="text-[10px] text-muted-foreground">Phase 1 · mock data</span>
+              <span className="text-[10px] text-muted-foreground">Growth OS</span>
             </div>
           )}
         </Link>
