@@ -47,6 +47,7 @@ type OpsOpportunity = {
 
 export function PipelineActions({ scope = "full" }: { scope?: "full" | "compact" }) {
   const qc = useQueryClient();
+  const { siteId, sites: scopedSites, currentSite } = useSiteScope();
   const sitesQ = useQuery({
     queryKey: ["sites-mini-actions"],
     queryFn: async () => {
@@ -67,13 +68,15 @@ export function PipelineActions({ scope = "full" }: { scope?: "full" | "compact"
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const scoreAll = useMutation({
+  const scoreScoped = useMutation({
     mutationFn: async () => {
-      const sites = sitesQ.data ?? [];
-      if (!sites.length) throw new Error("No sites connected yet.");
+      const list = sitesQ.data ?? scopedSites;
+      if (!list.length) throw new Error("No sites connected yet.");
+      const targets = siteId ? list.filter((s) => s.id === siteId) : list;
+      if (!targets.length) throw new Error("Scoped site not found.");
       let inserted = 0;
       const failures: string[] = [];
-      for (const site of sites) {
+      for (const site of targets) {
         try {
           const r = await scoreOpportunities({ data: { site_id: site.id } });
           inserted += r.inserted;
@@ -92,15 +95,17 @@ export function PipelineActions({ scope = "full" }: { scope?: "full" | "compact"
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const scoreLabel = siteId && currentSite ? `Rescore · ${currentSite.name}` : "Rescore all sites";
+
   return (
     <div className="flex flex-wrap gap-2">
       <Button onClick={() => importAll.mutate()} disabled={importAll.isPending} size={scope === "compact" ? "sm" : "default"}>
         {importAll.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <BarChart3 className="mr-1.5 h-3.5 w-3.5" />}
         Run full GSC pipeline
       </Button>
-      <Button variant="outline" onClick={() => scoreAll.mutate()} disabled={scoreAll.isPending || importAll.isPending} size={scope === "compact" ? "sm" : "default"}>
-        {scoreAll.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Target className="mr-1.5 h-3.5 w-3.5" />}
-        Rescore opportunities
+      <Button variant="outline" onClick={() => scoreScoped.mutate()} disabled={scoreScoped.isPending || importAll.isPending} size={scope === "compact" ? "sm" : "default"}>
+        {scoreScoped.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Target className="mr-1.5 h-3.5 w-3.5" />}
+        {scoreLabel}
       </Button>
       <Button variant="outline" asChild size={scope === "compact" ? "sm" : "default"}>
         <Link to="/gsc/connect">
