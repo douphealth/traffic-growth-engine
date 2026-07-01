@@ -21,14 +21,17 @@ const statusTone: Record<string, "outline" | "default" | "secondary"> = {
 };
 
 function PublishingQueue() {
+  const { siteId } = useSiteScope();
   const q = useQuery({
-    queryKey: ["publish-jobs"],
+    queryKey: ["publish-jobs", siteId ?? "all"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let req = supabase
         .from("publish_jobs")
         .select("id, mode, status, requested_by, created_at, pages(url)")
         .order("created_at", { ascending: false })
         .limit(200);
+      if (siteId) req = req.eq("site_id", siteId);
+      const { data, error } = await req;
       if (error) throw error;
       return data ?? [];
     },
