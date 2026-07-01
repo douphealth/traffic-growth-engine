@@ -72,7 +72,7 @@ function siteIdentityFromProperty(siteUrl: string): { host: string; baseUrl: str
   }
 }
 
-function choosePrimaryProperty(properties: GscPropertyRow[], siteId: string, propertyId: string, siteUrl: string) {
+function choosePrimaryProperty(properties: GscPropertyRow[], propertyId: string, siteUrl: string) {
   const variants = properties.filter((p) => canonicalHostFromProperty(p.site_url) === canonicalHostFromProperty(siteUrl));
   const preferred = variants.find((p) => p.site_url.startsWith("sc-domain:")) ?? variants[0];
   return preferred?.id === propertyId;
@@ -155,6 +155,11 @@ async function autoCreateAndLinkSites(
     : { data: [] };
   const linkedPropIds = new Set((existingMaps ?? []).map((m: any) => m.gsc_property_id));
 
+  const { data: existingSites } = await supabaseAdmin
+    .from("sites")
+    .select("id, base_url, gsc_property, canonical_host")
+    .eq("org_id", orgId);
+
   let created = 0;
   let linked = 0;
 
@@ -164,29 +169,25 @@ async function autoCreateAndLinkSites(
     const identity = siteIdentityFromProperty(prop.site_url);
     if (!identity) continue;
 
-    const { data: exactSite } = await supabaseAdmin
-      .from("sites")
-      .select("id")
-      .eq("org_id", orgId)
-      .eq("gsc_property", prop.site_url)
-      .maybeSingle();
-
-    let siteId = (exactSite as { id: string } | null)?.id;
+    let siteId = ((existingSites ?? []) as Array<{ id: string; base_url: string; gsc_property: string | null; canonical_host?: string | null }>).find(
+      (site) => site.gsc_property === prop.site_url,
+    )?.id;
 
     if (!siteId) {
-      const { data: candidates } = await supabaseAdmin
-        .from("sites")
-        .select("id, gsc_property")
-        .eq("org_id", orgId)
-        .eq("base_url", identity.baseUrl)
-        .limit(10);
-      const reusable = (candidates ?? []).find((site: any) => !site.gsc_property);
+      const reusable = ((existingSites ?? []) as Array<{ id: string; base_url: string; gsc_property: string | null; canonical_host?: string | null }>).find(
+        (site) => (site.canonical_host ?? canonicalHostFromProperty(site.base_url)) === identity.canonicalHost,
+      );
       siteId = reusable?.id;
 
       if (siteId) {
         const { error: updateErr } = await supabaseAdmin
           .from("sites")
-          .update({ gsc_property: prop.site_url, status: "connected" })
+          .update({
+            gsc_property: prop.site_url.startsWith("sc-domain:") ? prop.site_url : reusable?.gsc_property ?? prop.site_url,
+            status: "connected",
+            canonical_host: identity.canonicalHost,
+            data_quality_status: "gsc_linked",
+          } as never)
           .eq("id", siteId);
         if (updateErr) throw new Error(updateErr.message);
       }
@@ -201,6 +202,8 @@ async function autoCreateAndLinkSites(
           base_url: identity.baseUrl,
           status: "connected",
           gsc_property: prop.site_url,
+          canonical_host: identity.canonicalHost,
+          data_quality_status: "gsc_linked",
         } as never)
         .select("id")
         .single();
@@ -214,8 +217,9 @@ async function autoCreateAndLinkSites(
         site_id: siteId,
         gsc_property_id: prop.id,
         connected_at: new Date().toISOString(),
+        is_primary: choosePrimaryProperty(properties, prop.id, prop.site_url),
       } as never,
-      { onConflict: "site_id" },
+      { onConflict: "gsc_property_id" },
     );
     if (mapErr) throw new Error(mapErr.message);
 
