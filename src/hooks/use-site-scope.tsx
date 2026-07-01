@@ -45,10 +45,11 @@ export function SiteScopeProvider({ children }: { children: ReactNode }) {
     return window.localStorage.getItem(STORAGE_KEY);
   });
 
-  // Auto-select the only site if just one exists and none stored.
+  // Auto-focus the first site so users start with a precise, single-site view
+  // instead of a scattered "All sites" aggregate. They can switch to All manually.
   useEffect(() => {
     if (!sitesQ.data || siteId) return;
-    if (sitesQ.data.length === 1) setSiteIdState(sitesQ.data[0].id);
+    if (sitesQ.data.length >= 1) setSiteIdState(sitesQ.data[0].id);
   }, [sitesQ.data, siteId]);
 
   // Drop stale selection if the site disappeared.
