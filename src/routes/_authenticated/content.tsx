@@ -7,32 +7,38 @@ import { GitCompare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { OpportunityQueue, PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
+import { useSiteScope } from "@/hooks/use-site-scope";
 
 export const Route = createFileRoute("/_authenticated/content")({
   component: ContentPipeline,
 });
 
 function ContentPipeline() {
+  const { siteId } = useSiteScope();
   const briefsQ = useQuery({
-    queryKey: ["content-briefs"],
+    queryKey: ["content-briefs", siteId ?? "all"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let req = supabase
         .from("content_briefs")
         .select("id, target_url, intent, status, target_queries, missing_entities, recommended_sections, monetization_angle")
         .order("created_at", { ascending: false })
         .limit(100);
+      if (siteId) req = req.eq("site_id", siteId);
+      const { data, error } = await req;
       if (error) throw error;
       return data ?? [];
     },
   });
   const diffsQ = useQuery({
-    queryKey: ["content-diffs"],
+    queryKey: ["content-diffs", siteId ?? "all"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let req = supabase
         .from("content_diffs")
         .select("id, proposed_title, status, pages(url), diff_summary")
         .order("created_at", { ascending: false })
         .limit(100);
+      if (siteId) req = req.eq("site_id", siteId);
+      const { data, error } = await req;
       if (error) throw error;
       return data ?? [];
     },
