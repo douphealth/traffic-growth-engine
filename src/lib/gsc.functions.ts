@@ -99,12 +99,13 @@ export const importGscData = createServerFn({ method: "POST" })
 
     const { data: mapping } = await supabase
       .from("site_gsc_connections")
-      .select("gsc_property_id, gsc_properties:gsc_property_id (site_url, connection_id)")
+      .select("gsc_property_id, is_primary, gsc_properties:gsc_property_id (site_url, connection_id)")
       .eq("site_id", site.id)
+      .order("is_primary", { ascending: false })
       .maybeSingle();
 
     const mapped = mapping as
-      | { gsc_property_id: string; gsc_properties: { site_url: string; connection_id: string } | null }
+      | { gsc_property_id: string; is_primary?: boolean | null; gsc_properties: { site_url: string; connection_id: string } | null }
       | null;
 
     if (mapped?.gsc_properties) {
@@ -190,6 +191,9 @@ export const importGscData = createServerFn({ method: "POST" })
         if (!rows.length) break;
         const upserts = rows.map((r) => ({
           site_id: site.id,
+          gsc_property_id: mapped?.gsc_property_id ?? null,
+          import_source: source,
+          imported_at: new Date().toISOString(),
           date: r.keys[0],
           url: r.keys[1],
           query: r.keys[2],
@@ -244,6 +248,14 @@ export const importGscData = createServerFn({ method: "POST" })
         opportunities: oppsResult.inserted,
       },
     });
+
+    await supabaseAdmin
+      .from("sites")
+      .update({
+        last_pipeline_run_at: new Date().toISOString(),
+        data_quality_status: totalRows > 0 ? "gsc_imported" : "gsc_connected_no_rows",
+      } as never)
+      .eq("id", site.id);
 
     return {
       status: "ok" as const,
