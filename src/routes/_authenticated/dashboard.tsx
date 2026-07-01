@@ -136,19 +136,21 @@ function DashboardPage() {
         {hasAnyData && (
           <>
             <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-              <Kpi label="Canonical sites" value={healthQ.data?.totals.sites ?? kpis.data?.sites ?? 0} />
-              <Kpi label="Analyzable pages" value={healthQ.data?.totals.pages ?? kpis.data?.pages ?? 0} />
-              <Kpi label="GSC URLs" value={healthQ.data?.totals.gsc_urls ?? 0} tone="info" />
-              <Kpi label="GSC rows" value={healthQ.data?.totals.gsc_rows ?? 0} tone="info" />
-              <Kpi label="Open opportunities" value={healthQ.data?.totals.opportunities ?? kpis.data?.oppsOpen ?? 0} tone="warning" />
+              <Kpi label={siteId ? "Site" : "Canonical sites"} value={scopedTotals?.sites ?? kpis.data?.sites ?? 0} />
+              <Kpi label="Analyzable pages" value={scopedTotals?.pages ?? kpis.data?.pages ?? 0} />
+              <Kpi label="GSC URLs" value={scopedTotals?.gsc_urls ?? 0} tone="info" />
+              <Kpi label="GSC rows" value={scopedTotals?.gsc_rows ?? 0} tone="info" />
+              <Kpi label="Open opportunities" value={scopedTotals?.opportunities ?? kpis.data?.oppsOpen ?? 0} tone="warning" />
             </div>
 
-            {healthQ.data && (
+            {healthQ.data && scopedTotals && (
               <Card className="border-primary/20">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <CardTitle className="text-base">Data credibility monitor</CardTitle>
+                      <CardTitle className="text-base">
+                        {currentSite ? `${currentSite.name} · credibility` : "Data credibility monitor"}
+                      </CardTitle>
                       <CardDescription>
                         Quality is computed from live imports, URL/page sync, freshness, duplicate-property consolidation, and opportunity coverage.
                       </CardDescription>
@@ -162,13 +164,13 @@ function DashboardPage() {
                   <div className="rounded-lg border border-border bg-muted/20 p-4">
                     <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Average quality</div>
                     <div className="mt-1 flex items-end gap-2">
-                      <span className="text-4xl font-semibold tabular-nums">{healthQ.data.totals.average_quality}</span>
+                      <span className="text-4xl font-semibold tabular-nums">{scopedTotals.average_quality}</span>
                       <span className="pb-1 text-sm text-muted-foreground">/100</span>
                     </div>
-                    <Progress value={healthQ.data.totals.average_quality} className="mt-3" />
+                    <Progress value={scopedTotals.average_quality} className="mt-3" />
                   </div>
                   <div className="space-y-2">
-                    {healthQ.data.sites.slice(0, 5).map((site) => (
+                    {scopedHealthSites.slice(0, siteId ? 1 : 5).map((site) => (
                       <div key={site.canonical_site_id} className="rounded-lg border border-border bg-card/50 p-3">
                         <div className="flex items-center justify-between gap-3">
                           <div className="min-w-0">
