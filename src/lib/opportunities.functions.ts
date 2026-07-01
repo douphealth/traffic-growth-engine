@@ -134,6 +134,26 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
 
     const opps: Opp[] = [];
     const now = new Date().toISOString();
+    const sourceWindow = {
+      source: "Google Search Console Search Analytics API",
+      last_28_days: { start: last28Start, end: last28End },
+      prior_28_days: { start: prev28Start, end: prev28End },
+      scoring_model: "AutoTraffic evidence-weighted v2A",
+    };
+
+    const topQueriesForUrl = (url: string, limit = 5) =>
+      Array.from(queryByUrl.get(url)?.entries() ?? [])
+        .map(([query, v]) => ({
+          query,
+          clicks: v.clicks,
+          impressions: v.impressions,
+          avg_position: v.positionN ? Number((v.positionSum / v.positionN).toFixed(2)) : null,
+          ctr: v.impressions ? Number((v.clicks / v.impressions).toFixed(4)) : 0,
+        }))
+        .sort((a, b) => b.impressions - a.impressions)
+        .slice(0, limit);
+
+    const confidenceFromVolume = (impressions: number, base: number) => clamp(base + Math.min(15, impressions / 100), 45, 92);
 
     function score(parts: {
       traffic_upside: number;
@@ -171,59 +191,63 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
       const upside = clamp((a.impressions / 50) + a.clicks / 5);
 
 
-      // CTR leak: pos<=10 and ctr < expected*0.7
-      if (avgPos != null && avgPos <= 10 && a.impressions >= 200) {
+      const topQueries = topQueriesForUrl(p.url);
+      const hasReliableGsc = a.impressions >= 20 || a.clicks >= 3;
+
+      // CTR leak: page-one rankings with statistically meaningful impressions and CTR below conservative benchmark.
+      if (avgPos != null && avgPos <= 10 && a.impressions >= 50) {
         const expected = EXPECTED_CTR[Math.round(avgPos)] ?? 0.02;
         if (expected > 0 && ctr < expected * 0.7) {
           const ctr_leak = clamp(((expected - ctr) / expected) * 100);
+          const estimatedLostClicks = Math.max(1, Math.round(a.impressions * Math.max(0, expected - ctr)));
           opps.push({
             site_id: site.id,
             page_id: p.id,
             type: "ctr_leak",
-            title: `CTR below expected at position ${avgPos.toFixed(1)}`,
-            summary: `Page ranks ${avgPos.toFixed(1)} but CTR is ${(ctr * 100).toFixed(2)}% vs ~${(expected * 100).toFixed(1)}% expected.`,
-            evidence: { impressions: a.impressions, clicks: a.clicks, ctr, expected_ctr: expected, avg_position: avgPos },
+            title: `CTR leak: ${estimatedLostClicks.toLocaleString()} estimated missed clicks`,
+            summary: `GSC shows ${a.impressions.toLocaleString()} impressions at average position ${avgPos.toFixed(1)} with ${(ctr * 100).toFixed(2)}% CTR; conservative benchmark is ~${(expected * 100).toFixed(1)}%.`,
+            evidence: { data_source: "GSC", date_range: `${last28Start} → ${last28End}`, impressions: a.impressions, clicks: a.clicks, ctr, expected_ctr: expected, avg_position: avgPos, estimated_lost_clicks: estimatedLostClicks, top_queries: topQueries },
             recommended_action: "Rewrite title tag + meta description with stronger SERP magnets (numbers, brackets, intent words).",
             validation_method: "Track CTR delta over next 28 days vs prior 28 days for the same queries.",
             severity: ctr_leak > 60 ? 4 : 3,
             impact_score: clamp(upside * 1.2 + ctr_leak * 0.4),
-            confidence_score: 85,
+            confidence_score: confidenceFromVolume(a.impressions, 72),
             effort_score: 20,
             risk_score: 15,
             reversibility_score: 95,
             priority: score({ traffic_upside: upside, ctr_leak, striking_distance: 0, decay: 0, monetization: 0, ai_answer: 0, internal_link_gap: 0, schema_gap: 0, safety: 0 }),
-            source_data: { window: "28d" },
+            source_data: { ...sourceWindow, page_url: p.url, query_count: queryByUrl.get(p.url)?.size ?? 0, top_queries: topQueries },
             generated_at: now,
           });
         }
       }
 
-      // Striking distance: pos 8-20, impressions > 100
-      if (avgPos != null && avgPos >= 8 && avgPos <= 20 && a.impressions >= 100) {
-        const sd = clamp(100 - (avgPos - 8) * 6);
+      // Striking distance: proven demand and ranking close enough to improve without SERP polling.
+      if (avgPos != null && avgPos >= 4 && avgPos <= 30 && a.impressions >= 20) {
+        const sd = clamp(100 - Math.max(0, avgPos - 4) * 3.2);
         opps.push({
           site_id: site.id,
           page_id: p.id,
           type: "striking_distance",
-          title: `Striking distance at position ${avgPos.toFixed(1)}`,
-          summary: `${a.impressions.toLocaleString()} impressions, position ${avgPos.toFixed(1)}. Small content boost may push into top 5.`,
-          evidence: { impressions: a.impressions, clicks: a.clicks, avg_position: avgPos },
-          recommended_action: "Expand sections answering top non-clicked queries; add FAQ; refresh internal links.",
+          title: `Striking distance: ${a.impressions.toLocaleString()} impressions at position ${avgPos.toFixed(1)}`,
+          summary: `GSC shows proven demand on this URL. The top queries are close enough that targeted updates can be prioritized before speculative work.`,
+          evidence: { data_source: "GSC", date_range: `${last28Start} → ${last28End}`, impressions: a.impressions, clicks: a.clicks, avg_position: avgPos, top_queries: topQueries },
+          recommended_action: "Update the page around the exact top-impression queries shown in evidence; strengthen headings, answer gaps, and internal links only where supported by those queries.",
           validation_method: "Re-measure position and clicks after 4 weeks.",
           severity: 3,
           impact_score: clamp(upside * 1.5),
-          confidence_score: 70,
+          confidence_score: confidenceFromVolume(a.impressions, avgPos <= 15 ? 62 : 52),
           effort_score: 45,
           risk_score: 10,
           reversibility_score: 90,
           priority: score({ traffic_upside: upside, ctr_leak: 0, striking_distance: sd, decay: 0, monetization: 0, ai_answer: 0, internal_link_gap: 0, schema_gap: 0, safety: 0 }),
-          source_data: { window: "28d" },
+          source_data: { ...sourceWindow, page_url: p.url, query_count: queryByUrl.get(p.url)?.size ?? 0, top_queries: topQueries },
           generated_at: now,
         });
       }
 
       // Decay: clicks down >30%
-      if (prev.clicks >= 50 && a.clicks < prev.clicks * 0.7) {
+      if (prev.clicks >= 20 && a.clicks < prev.clicks * 0.7) {
         const decay = clamp(((prev.clicks - a.clicks) / prev.clicks) * 100);
         opps.push({
           site_id: site.id,
@@ -231,7 +255,7 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
           type: "decayed_page",
           title: `Decayed page — clicks down ${decay.toFixed(0)}%`,
           summary: `${prev.clicks} → ${a.clicks} clicks vs prior 28 days.`,
-          evidence: { clicks_prev: prev.clicks, clicks_now: a.clicks, impressions_prev: prev.impressions, impressions_now: a.impressions },
+          evidence: { data_source: "GSC", current_range: `${last28Start} → ${last28End}`, previous_range: `${prev28Start} → ${prev28End}`, clicks_prev: prev.clicks, clicks_now: a.clicks, impressions_prev: prev.impressions, impressions_now: a.impressions, top_queries: topQueries },
           recommended_action: "Audit freshness: update dates, screenshots, prices; refresh intro and conclusion; resubmit URL.",
           validation_method: "Compare next-28-day clicks vs current 28-day baseline.",
           severity: decay > 60 ? 4 : 3,
@@ -241,20 +265,20 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
           risk_score: 15,
           reversibility_score: 90,
           priority: score({ traffic_upside: upside, ctr_leak: 0, striking_distance: 0, decay, monetization: 0, ai_answer: 0, internal_link_gap: 0, schema_gap: 0, safety: 0 }),
-          source_data: { window: "28d-vs-prev-28d" },
+          source_data: { ...sourceWindow, page_url: p.url, query_count: queryByUrl.get(p.url)?.size ?? 0, top_queries: topQueries },
           generated_at: now,
         });
       }
 
       // Indexation risk
-      if ((p.noindex || p.canonical_mismatch || p.in_sitemap === false) && a.impressions >= 100) {
+      if ((p.noindex || p.canonical_mismatch || p.in_sitemap === false) && hasReliableGsc) {
         opps.push({
           site_id: site.id,
           page_id: p.id,
           type: "indexation_risk",
           title: `Indexation risk on high-traffic page`,
           summary: `Page is noindexed, has canonical mismatch, or missing from sitemap, yet earns ${a.impressions} impressions.`,
-          evidence: { noindex: !!p.noindex, canonical_mismatch: !!p.canonical_mismatch, in_sitemap: !!p.in_sitemap, impressions: a.impressions },
+          evidence: { data_source: "GSC + page inventory", noindex: !!p.noindex, canonical_mismatch: !!p.canonical_mismatch, in_sitemap: !!p.in_sitemap, impressions: a.impressions, top_queries: topQueries },
           recommended_action: "Verify intentional. If not, remove noindex, fix canonical, add to sitemap, request re-indexing.",
           validation_method: "Inspect URL in Search Console after fix; monitor impressions.",
           severity: 5,
