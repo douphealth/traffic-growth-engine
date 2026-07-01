@@ -72,6 +72,9 @@ export const syncPagesFromGsc = createServerFn({ method: "POST" })
           status: "unknown",
           title: url,
           indexability_status: "unknown",
+          discovery_source: "gsc",
+          gsc_first_seen_at: now,
+          gsc_last_seen_at: now,
           last_imported_at: now,
         });
       } else if (ex.wp_post_id == null) {
@@ -96,7 +99,7 @@ export const syncPagesFromGsc = createServerFn({ method: "POST" })
       const batch = toTouch.slice(i, i + 500);
       const { error, count } = await supabaseAdmin
         .from("pages")
-        .update({ last_imported_at: now }, { count: "exact" })
+        .update({ last_imported_at: now, discovery_source: "gsc", gsc_last_seen_at: now } as never, { count: "exact" })
         .in("id", batch);
       if (error) throw new Error(error.message);
       updated += count ?? batch.length;
@@ -111,6 +114,11 @@ export const syncPagesFromGsc = createServerFn({ method: "POST" })
       entity_id: site.id,
       after: { discovered: urls.size, inserted, updated },
     });
+
+    await supabaseAdmin
+      .from("sites")
+      .update({ last_pipeline_run_at: now, data_quality_status: "pages_synced_from_gsc" } as never)
+      .eq("id", site.id);
 
     return { discovered: urls.size, inserted, updated };
   });

@@ -38,25 +38,44 @@ async function callGscGateway(path: string, init?: RequestInit): Promise<Respons
   return res;
 }
 
-function siteIdentityFromProperty(siteUrl: string): { host: string; baseUrl: string; name: string } | null {
+function canonicalHostFromProperty(siteUrl: string): string {
+  const identity = siteIdentityFromProperty(siteUrl);
+  return (identity?.host ?? siteUrl)
+    .replace(/^https?:\/\//, "")
+    .replace(/^sc-domain:/, "")
+    .replace(/^www\./, "")
+    .replace(/\/$/, "")
+    .toLowerCase();
+}
+
+function siteIdentityFromProperty(siteUrl: string): { host: string; baseUrl: string; name: string; canonicalHost: string } | null {
   if (siteUrl.startsWith("sc-domain:")) {
-    const host = siteUrl.slice("sc-domain:".length).trim().replace(/^\*\./, "");
+    const host = siteUrl.slice("sc-domain:".length).trim().replace(/^\*\./, "").replace(/^www\./, "").toLowerCase();
     if (!host) return null;
-    return { host, baseUrl: `https://${host}`, name: host };
+    return { host, baseUrl: `https://${host}`, name: host, canonicalHost: host };
   }
 
   try {
     const u = new URL(siteUrl);
     const pathSuffix = u.pathname && u.pathname !== "/" ? u.pathname.replace(/\/$/, "") : "";
+    const host = u.hostname.replace(/^www\./, "").toLowerCase();
     return {
-      host: u.hostname,
-      baseUrl: `${u.protocol}//${u.host}${pathSuffix}`,
-      name: pathSuffix ? `${u.hostname}${pathSuffix}` : u.hostname,
+      host,
+      baseUrl: `${u.protocol}//${host}${pathSuffix}`,
+      name: pathSuffix ? `${host}${pathSuffix}` : host,
+      canonicalHost: pathSuffix ? `${host}${pathSuffix}` : host,
     };
   } catch {
     const cleaned = siteUrl.trim();
-    return cleaned ? { host: cleaned, baseUrl: cleaned, name: cleaned } : null;
+    const canonicalHost = cleaned.replace(/^www\./, "").toLowerCase();
+    return cleaned ? { host: canonicalHost, baseUrl: cleaned, name: canonicalHost, canonicalHost } : null;
   }
+}
+
+function choosePrimaryProperty(properties: GscPropertyRow[], propertyId: string, siteUrl: string) {
+  const variants = properties.filter((p) => canonicalHostFromProperty(p.site_url) === canonicalHostFromProperty(siteUrl));
+  const preferred = variants.find((p) => p.site_url.startsWith("sc-domain:")) ?? variants[0];
+  return preferred?.id === propertyId;
 }
 
 async function getFirstOrgForUser(supabase: any, userId: string) {
@@ -136,6 +155,12 @@ async function autoCreateAndLinkSites(
     : { data: [] };
   const linkedPropIds = new Set((existingMaps ?? []).map((m: any) => m.gsc_property_id));
 
+  const { data: existingSites } = await supabaseAdmin
+    .from("sites")
+    .select("id, base_url, gsc_property, canonical_host")
+    .eq("org_id", orgId);
+  const siteCache = [...((existingSites ?? []) as Array<{ id: string; base_url: string; gsc_property: string | null; canonical_host?: string | null }>)];
+
   let created = 0;
   let linked = 0;
 
@@ -145,31 +170,32 @@ async function autoCreateAndLinkSites(
     const identity = siteIdentityFromProperty(prop.site_url);
     if (!identity) continue;
 
-    const { data: exactSite } = await supabaseAdmin
-      .from("sites")
-      .select("id")
-      .eq("org_id", orgId)
-      .eq("gsc_property", prop.site_url)
-      .maybeSingle();
-
-    let siteId = (exactSite as { id: string } | null)?.id;
+    let siteId = siteCache.find(
+      (site) => site.gsc_property === prop.site_url,
+    )?.id;
 
     if (!siteId) {
-      const { data: candidates } = await supabaseAdmin
-        .from("sites")
-        .select("id, gsc_property")
-        .eq("org_id", orgId)
-        .eq("base_url", identity.baseUrl)
-        .limit(10);
-      const reusable = (candidates ?? []).find((site: any) => !site.gsc_property);
+      const reusable = siteCache.find(
+        (site) => (site.canonical_host ?? canonicalHostFromProperty(site.base_url)) === identity.canonicalHost,
+      );
       siteId = reusable?.id;
 
       if (siteId) {
         const { error: updateErr } = await supabaseAdmin
           .from("sites")
-          .update({ gsc_property: prop.site_url, status: "connected" })
+          .update({
+            gsc_property: prop.site_url.startsWith("sc-domain:") ? prop.site_url : reusable?.gsc_property ?? prop.site_url,
+            status: "connected",
+            canonical_host: identity.canonicalHost,
+            data_quality_status: "gsc_linked",
+          } as never)
           .eq("id", siteId);
         if (updateErr) throw new Error(updateErr.message);
+        const cached = siteCache.find((site) => site.id === siteId);
+        if (cached) {
+          cached.gsc_property = prop.site_url.startsWith("sc-domain:") ? prop.site_url : cached.gsc_property ?? prop.site_url;
+          cached.canonical_host = identity.canonicalHost;
+        }
       }
     }
 
@@ -182,11 +208,14 @@ async function autoCreateAndLinkSites(
           base_url: identity.baseUrl,
           status: "connected",
           gsc_property: prop.site_url,
+          canonical_host: identity.canonicalHost,
+          data_quality_status: "gsc_linked",
         } as never)
         .select("id")
         .single();
       if (insertErr || !inserted) throw new Error(insertErr?.message ?? "Unable to create site");
       siteId = (inserted as { id: string }).id;
+      siteCache.push({ id: siteId, base_url: identity.baseUrl, gsc_property: prop.site_url, canonical_host: identity.canonicalHost });
       created++;
     }
 
@@ -195,8 +224,9 @@ async function autoCreateAndLinkSites(
         site_id: siteId,
         gsc_property_id: prop.id,
         connected_at: new Date().toISOString(),
+        is_primary: choosePrimaryProperty(properties, prop.id, prop.site_url),
       } as never,
-      { onConflict: "site_id" },
+      { onConflict: "gsc_property_id" },
     );
     if (mapErr) throw new Error(mapErr.message);
 
@@ -390,11 +420,21 @@ export const connectGscPropertyToSite = createServerFn({ method: "POST" })
     if (site.org_id !== prop.org_id) throw new Error("Site and property are in different workspaces");
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { count: siteMappings } = await supabaseAdmin
+      .from("site_gsc_connections")
+      .select("id", { count: "exact", head: true })
+      .eq("site_id", site.id);
+
     const { error: upErr } = await supabaseAdmin
       .from("site_gsc_connections")
       .upsert(
-        { site_id: site.id, gsc_property_id: prop.id, connected_at: new Date().toISOString() } as never,
-        { onConflict: "site_id" },
+        {
+          site_id: site.id,
+          gsc_property_id: prop.id,
+          connected_at: new Date().toISOString(),
+          is_primary: (siteMappings ?? 0) === 0,
+        } as never,
+        { onConflict: "gsc_property_id" },
       );
     if (upErr) throw new Error(upErr.message);
 
@@ -482,80 +522,14 @@ export const autoLinkGscProperties = createServerFn({ method: "POST" })
       .eq("connection_id", conn.id);
     if (!props || props.length === 0) return { ok: true as const, created: 0, linked: 0 };
 
-    const { data: existingMaps } = await supabase
-      .from("site_gsc_connections")
-      .select("gsc_property_id, site_id");
-    const linkedPropIds = new Set((existingMaps ?? []).map((m) => m.gsc_property_id));
-
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
-    let created = 0;
-    let linked = 0;
-
-    for (const p of props) {
-      if (linkedPropIds.has(p.id)) continue;
-
-      let host = "";
-      let baseUrl = "";
-      if (p.site_url.startsWith("sc-domain:")) {
-        host = p.site_url.slice("sc-domain:".length).trim();
-        baseUrl = `https://${host}`;
-      } else {
-        try {
-          const u = new URL(p.site_url);
-          host = u.hostname;
-          baseUrl = `${u.protocol}//${u.host}`;
-        } catch {
-          host = p.site_url;
-          baseUrl = p.site_url;
-        }
-      }
-      if (!host) continue;
-
-      const { data: existingSite } = await supabaseAdmin
-        .from("sites")
-        .select("id")
-        .eq("org_id", p.org_id)
-        .eq("base_url", baseUrl)
-        .maybeSingle();
-
-      let siteId = (existingSite as { id: string } | null)?.id;
-      if (!siteId) {
-        const { data: ins, error: insErr } = await supabaseAdmin
-          .from("sites")
-          .insert({
-            org_id: p.org_id,
-            name: host,
-            base_url: baseUrl,
-            status: "pending",
-            gsc_property: p.site_url,
-          } as never)
-          .select("id")
-          .single();
-        if (insErr) throw new Error(insErr.message);
-        siteId = (ins as { id: string }).id;
-        created++;
-      }
-
-      const { error: mapErr } = await supabaseAdmin
-        .from("site_gsc_connections")
-        .upsert(
-          {
-            site_id: siteId,
-            gsc_property_id: p.id,
-            connected_at: new Date().toISOString(),
-          } as never,
-          { onConflict: "site_id" },
-        );
-      if (mapErr) throw new Error(mapErr.message);
-
-      await supabaseAdmin
-        .from("gsc_properties")
-        .update({ selected: true })
-        .eq("id", p.id);
-
-      linked++;
-    }
+    const { created, linked } = await autoCreateAndLinkSites(
+      supabaseAdmin,
+      conn.org_id,
+      userId,
+      conn.id,
+      props as GscPropertyRow[],
+    );
 
     await supabase.from("audit_logs").insert({
       org_id: conn.org_id,
