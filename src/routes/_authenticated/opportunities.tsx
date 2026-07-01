@@ -13,6 +13,7 @@ import { scoreOpportunities } from "@/lib/opportunities.functions";
 import { syncPagesFromGsc, importAllConnectedGscProperties } from "@/lib/gsc-pages.functions";
 import { toast } from "sonner";
 import { getPipelineHealth } from "@/lib/quality.functions";
+import { useSiteScope } from "@/hooks/use-site-scope";
 
 
 export const Route = createFileRoute("/_authenticated/opportunities")({
