@@ -58,6 +58,7 @@ function AIVisibilityPage() {
           <EmptyState
             title="No tracked prompts yet"
             description="AI visibility polling is not enabled in this build. Tracked prompts and polling runs will appear here once configured."
+            action={<PipelineActions scope="compact" />}
           />
         ) : (
           <div className="space-y-2">
