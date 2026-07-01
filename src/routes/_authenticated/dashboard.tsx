@@ -87,7 +87,7 @@ function DashboardPage() {
           (acc, s) => ({
             sites: 1,
             pages: acc.pages + s.pages,
-            gsc_urls: acc.gsc_urls + (s as unknown as { gsc_urls?: number }).gsc_urls ?? 0,
+            gsc_urls: acc.gsc_urls + ((s as unknown as { gsc_urls?: number }).gsc_urls ?? 0),
             gsc_rows: acc.gsc_rows + s.gsc_rows,
             opportunities: acc.opportunities + s.opportunities,
             average_quality: s.quality_score,
