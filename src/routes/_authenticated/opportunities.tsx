@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { PageBody, PageHeader, EmptyState } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, FileEdit, Loader2, Target, RefreshCw } from "lucide-react";
+import { CheckCircle2, ExternalLink, Loader2, RefreshCw, ShieldAlert, Target } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { scoreOpportunities } from "@/lib/opportunities.functions";
 import { syncPagesFromGsc, importAllConnectedGscProperties } from "@/lib/gsc-pages.functions";
 import { toast } from "sonner";
+import { getPipelineHealth } from "@/lib/quality.functions";
 
 
 export const Route = createFileRoute("/_authenticated/opportunities")({
@@ -38,6 +39,7 @@ type OppRow = {
   title: string;
   summary: string | null;
   evidence: Record<string, unknown> | null;
+  source_data: Record<string, unknown> | null;
   recommended_action: string | null;
   validation_method: string | null;
   severity: number | null;
@@ -70,13 +72,18 @@ function OpportunityBoard() {
     },
   });
 
+  const healthQ = useQuery({
+    queryKey: ["pipeline-health"],
+    queryFn: () => getPipelineHealth(),
+  });
+
   const oppsQ = useQuery({
     queryKey: ["opportunities", status],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("opportunities")
         .select(
-          "id, site_id, page_id, type, title, summary, evidence, recommended_action, validation_method, severity, impact_score, confidence_score, effort_score, risk_score, reversibility_score, priority, status, generated_at, page:pages(url, title), site:sites(name)",
+          "id, site_id, page_id, type, title, summary, evidence, source_data, recommended_action, validation_method, severity, impact_score, confidence_score, effort_score, risk_score, reversibility_score, priority, status, generated_at, page:pages(url, title), site:sites(name)",
         )
         .eq("status", status as never)
         .order("priority", { ascending: false })
@@ -125,6 +132,7 @@ function OpportunityBoard() {
     onSuccess: (n) => {
       toast.success(`Generated ${n} opportunities`);
       qc.invalidateQueries({ queryKey: ["opportunities"] });
+      qc.invalidateQueries({ queryKey: ["pipeline-health"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -160,6 +168,7 @@ function OpportunityBoard() {
       toast.success(`Repair complete — ${r.opps} opportunities generated.`);
       qc.invalidateQueries({ queryKey: ["opportunities"] });
       qc.invalidateQueries({ queryKey: ["gsc-rows-count"] });
+      qc.invalidateQueries({ queryKey: ["pipeline-health"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -174,6 +183,7 @@ function OpportunityBoard() {
       );
       qc.invalidateQueries({ queryKey: ["opportunities"] });
       qc.invalidateQueries({ queryKey: ["gsc-rows-count"] });
+      qc.invalidateQueries({ queryKey: ["pipeline-health"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -195,7 +205,7 @@ function OpportunityBoard() {
     <>
       <PageHeader
         title="Opportunity Board"
-        description="Real opportunities scored from imported WordPress, Sitemap, and Search Console data. Priority is a weighted blend of impact, CTR leak, striking-distance, decay, monetization, AI readiness, link gaps, schema gaps, and safety."
+        description="Evidence-first actions scored from live Search Console query/page data. Every card shows the exact URL, query, date range, benchmark, confidence, and validation method."
         actions={
           <Button onClick={() => score.mutate()} disabled={score.isPending}>
             {score.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Target className="mr-1.5 h-3.5 w-3.5" />}
@@ -204,6 +214,35 @@ function OpportunityBoard() {
         }
       />
       <PageBody>
+        {healthQ.data && (
+          <div className="grid gap-3 md:grid-cols-4">
+            <PipelineMetric label="GSC rows" value={healthQ.data.totals.gsc_rows} />
+            <PipelineMetric label="GSC URLs" value={healthQ.data.totals.gsc_urls} />
+            <PipelineMetric label="Analyzable pages" value={healthQ.data.totals.pages} />
+            <PipelineMetric label="Open opportunities" value={healthQ.data.totals.opportunities} tone="warning" />
+          </div>
+        )}
+
+        {healthQ.data && healthQ.data.sites.some((s) => s.status !== "ready") && (
+          <div className="rounded-lg border border-warning/40 bg-warning/5 p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-2">
+                <ShieldAlert className="mt-0.5 h-4 w-4 text-warning" />
+                <div>
+                  <div className="text-sm font-medium">Pipeline needs attention</div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {healthQ.data.sites.find((s) => s.status !== "ready")?.issues[0] ?? "Run the GSC pipeline to refresh rows, pages, and scoring."}
+                  </p>
+                </div>
+              </div>
+              <Button onClick={() => repair.mutate()} disabled={repair.isPending} size="sm">
+                {repair.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+                Repair pipeline
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center gap-2">
           <Input placeholder="Search title, URL…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" />
           <Select value={type} onValueChange={setType}>
@@ -322,20 +361,8 @@ function OpportunityBoard() {
                   <Score label="Reversibility" value={o.reversibility_score ?? 0} />
                 </div>
 
-                {o.evidence && Object.keys(o.evidence).length > 0 && (
-                  <div className="rounded-md border border-border bg-muted/20 p-3 text-xs space-y-1.5">
-                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Evidence</div>
-                    <ul className="grid sm:grid-cols-2 gap-x-4 gap-y-1">
-                      {Object.entries(o.evidence).slice(0, 10).map(([k, v]) => (
-                        <li key={k} className="flex justify-between gap-2">
-                          <span className="text-muted-foreground">{k}</span>
-                          <span className="font-medium tabular-nums truncate text-right max-w-[60%]">
-                            {typeof v === "number" ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 3 }) : String(Array.isArray(v) ? v.length + " items" : v).slice(0, 80)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                {((o.evidence && Object.keys(o.evidence).length > 0) || (o.source_data && Object.keys(o.source_data).length > 0)) && (
+                  <EvidencePanel evidence={{ ...(o.source_data ?? {}), ...(o.evidence ?? {}) }} />
                 )}
 
                 <div className="grid sm:grid-cols-2 gap-3 text-xs">
@@ -364,12 +391,13 @@ function OpportunityBoard() {
                   >
                     Dismiss
                   </Button>
-                  <Button size="sm" asChild>
-                    <Link to="/content">
-                      <FileEdit className="mr-1.5 h-3.5 w-3.5" /> Generate brief
-                      <ArrowRight className="ml-1.5 h-3 w-3" />
-                    </Link>
-                  </Button>
+                  {o.page?.url && (
+                    <Button size="sm" variant="outline" asChild>
+                      <a href={o.page.url} target="_blank" rel="noreferrer">
+                        <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Open URL
+                      </a>
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -378,6 +406,107 @@ function OpportunityBoard() {
       </PageBody>
     </>
   );
+}
+
+function PipelineMetric({ label, value, tone }: { label: string; value: number; tone?: "warning" }) {
+  return (
+    <Card className={tone === "warning" ? "border-warning/40" : undefined}>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+            <div className="mt-1 text-2xl font-semibold tabular-nums">{value.toLocaleString()}</div>
+          </div>
+          {value > 0 ? <CheckCircle2 className="h-4 w-4 text-success" /> : <ShieldAlert className="h-4 w-4 text-warning" />}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function EvidencePanel({ evidence }: { evidence: Record<string, unknown> }) {
+  const topQueries = Array.isArray(evidence.top_queries) ? evidence.top_queries as Array<Record<string, unknown>> : [];
+  const directRows = Object.entries(evidence).filter(([key]) => key !== "top_queries" && key !== "urls");
+  const competingUrls = Array.isArray(evidence.urls) ? evidence.urls as string[] : [];
+
+  return (
+    <div className="rounded-md border border-border bg-muted/20 p-3 text-xs space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Evidence from real data</div>
+        {evidence.data_source != null ? <Badge variant="outline" className="text-[10px]">{String(evidence.data_source)}</Badge> : null}
+      </div>
+
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1.5">
+        {directRows.slice(0, 12).map(([k, v]) => (
+          <div key={k} className="flex justify-between gap-2 border-b border-border/40 pb-1">
+            <span className="text-muted-foreground">{labelize(k)}</span>
+            <span className="font-medium tabular-nums text-right max-w-[65%] break-words">{formatEvidence(v)}</span>
+          </div>
+        ))}
+      </div>
+
+      {topQueries.length > 0 && (
+        <div>
+          <div className="mb-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">Top GSC queries</div>
+          <div className="overflow-x-auto rounded border border-border/70">
+            <table className="w-full min-w-[560px] text-xs">
+              <thead className="bg-muted/40 text-muted-foreground">
+                <tr>
+                  <th className="px-2 py-1.5 text-left font-medium">Query</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Impr.</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Clicks</th>
+                  <th className="px-2 py-1.5 text-right font-medium">CTR</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Pos.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topQueries.slice(0, 5).map((q, i) => (
+                  <tr key={`${q.query}-${i}`} className="border-t border-border/50">
+                    <td className="px-2 py-1.5 font-medium">{String(q.query ?? "—")}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{formatNumber(q.impressions)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{formatNumber(q.clicks)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{formatPct(q.ctr)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{formatNumber(q.avg_position, 1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {competingUrls.length > 0 && (
+        <div>
+          <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">Competing URLs</div>
+          <div className="space-y-1">
+            {competingUrls.slice(0, 5).map((url) => <div key={url} className="truncate rounded border border-border/50 px-2 py-1 font-medium">{url}</div>)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function labelize(key: string): string {
+  return key.replace(/_/g, " ");
+}
+
+function formatEvidence(value: unknown): string {
+  if (typeof value === "number") return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  if (Array.isArray(value)) return `${value.length} items`;
+  if (value == null) return "—";
+  return String(value);
+}
+
+function formatNumber(value: unknown, digits = 0): string {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: digits }) : "—";
+}
+
+function formatPct(value: unknown): string {
+  const n = Number(value);
+  return Number.isFinite(n) ? `${(n * 100).toFixed(2)}%` : "—";
 }
 
 function Score({ label, value, invert }: { label: string; value: number; invert?: boolean }) {

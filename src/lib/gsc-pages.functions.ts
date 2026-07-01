@@ -22,22 +22,24 @@ export const syncPagesFromGsc = createServerFn({ method: "POST" })
       .single();
     if (!site) throw new Error("Site not found");
 
-    // Distinct URLs from GSC for this site (paginate to be safe)
+    // Distinct URLs from GSC for this site. Order by URL so pagination is
+    // deterministic and keep going until Supabase returns a short page; do not
+    // cap at 200k rows because large enterprise GSC exports regularly exceed it.
     const urls = new Set<string>();
     let from = 0;
-    const pageSize = 1000;
+    const pageSize = 5000;
     while (true) {
       const { data: rows, error } = await supabaseAdmin
         .from("gsc_page_query_daily")
         .select("url")
         .eq("site_id", site.id)
+        .order("url", { ascending: true })
         .range(from, from + pageSize - 1);
       if (error) throw new Error(error.message);
       if (!rows || !rows.length) break;
       for (const r of rows) if (r.url) urls.add(r.url);
       if (rows.length < pageSize) break;
       from += pageSize;
-      if (from > 200000) break;
     }
 
     if (urls.size === 0) {
@@ -133,7 +135,6 @@ export const importAllConnectedGscProperties = createServerFn({ method: "POST" }
   .handler(async ({ context }) => {
     const { supabase } = context;
     const { importGscData } = await import("@/lib/gsc.functions");
-    const { scoreOpportunities } = await import("@/lib/opportunities.functions");
 
     const { data: orgs } = await supabase
       .from("organization_members")
@@ -146,7 +147,7 @@ export const importAllConnectedGscProperties = createServerFn({ method: "POST" }
 
     const { data: sites } = await supabase
       .from("sites")
-      .select("id, name, base_url, site_gsc_connections!inner(gsc_property_id)")
+      .select("id, name, base_url, gsc_property, site_gsc_connections(gsc_property_id)")
       .in("org_id", orgIds);
 
     const results: Array<{
@@ -166,7 +167,9 @@ export const importAllConnectedGscProperties = createServerFn({ method: "POST" }
       totPages = 0,
       totOpps = 0;
 
-    for (const s of sites ?? []) {
+    const targets = (sites ?? []).filter((s: any) => Boolean(s.gsc_property) || (s.site_gsc_connections?.length ?? 0) > 0);
+
+    for (const s of targets) {
       try {
         const imp = await importGscData({ data: { site_id: s.id } });
         if ("status" in imp && imp.status === "not_connected") {
@@ -175,6 +178,7 @@ export const importAllConnectedGscProperties = createServerFn({ method: "POST" }
         }
         const i = imp as {
           rows: number;
+          skipped_rows?: number;
           pages?: { discovered: number; inserted: number; updated: number };
           opportunities?: number;
         };

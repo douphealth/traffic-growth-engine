@@ -38,11 +38,27 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
       .single();
     if (!site) throw new Error("Site not found");
 
-    // Load pages
-    const { data: pages } = await supabaseAdmin
+    // Load pages. Scoring is self-healing for GSC-only sites: if rows exist
+    // but pages were never materialized, create analyzable `gsc_url` pages first.
+    let { data: pages } = await supabaseAdmin
       .from("pages")
       .select("id, url, title, word_count, status, noindex, canonical_mismatch, in_sitemap, post_type, wp_post_id, extracted")
       .eq("site_id", site.id);
+    if (!pages?.length) {
+      const { count: gscRows } = await supabaseAdmin
+        .from("gsc_page_query_daily")
+        .select("id", { count: "exact", head: true })
+        .eq("site_id", site.id);
+      if ((gscRows ?? 0) > 0) {
+        const { syncPagesFromGsc } = await import("@/lib/gsc-pages.functions");
+        await syncPagesFromGsc({ data: { site_id: site.id } });
+        const retry = await supabaseAdmin
+          .from("pages")
+          .select("id, url, title, word_count, status, noindex, canonical_mismatch, in_sitemap, post_type, wp_post_id, extracted")
+          .eq("site_id", site.id);
+        pages = retry.data;
+      }
+    }
     const pageList = (pages ?? []) as PageRow[];
     const pageByUrl = new Map(pageList.map((p) => [p.url, p]));
 
@@ -71,6 +87,7 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
     const aggLast = new Map<string, Agg>(); // url
     const aggPrev = new Map<string, Agg>();
     const queryByUrl = new Map<string, Map<string, Agg>>();
+    const queryUrlAgg = new Map<string, Map<string, Agg>>();
     const urlsByQuery = new Map<string, Set<string>>(); // for cannibalization
 
     const add = (m: Map<string, Agg>, key: string, r: { clicks: number | null; impressions: number | null; position: number | null }) => {
@@ -88,6 +105,8 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
       add(aggLast, r.url, r);
       if (!queryByUrl.has(r.url)) queryByUrl.set(r.url, new Map());
       add(queryByUrl.get(r.url)!, r.query, r);
+      if (!queryUrlAgg.has(r.query)) queryUrlAgg.set(r.query, new Map());
+      add(queryUrlAgg.get(r.query)!, r.url, r);
       if ((r.position ?? 99) <= 20) {
         if (!urlsByQuery.has(r.query)) urlsByQuery.set(r.query, new Set());
         urlsByQuery.get(r.query)!.add(r.url);
@@ -153,6 +172,15 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
         .sort((a, b) => b.impressions - a.impressions)
         .slice(0, limit);
 
+    type QueryStat = ReturnType<typeof topQueriesForUrl>[number];
+
+    const evidenceBase = (pageUrl: string) => ({
+      data_source: "Google Search Console Search Analytics API",
+      date_range: `${last28Start} → ${last28End}`,
+      page_url: pageUrl,
+      benchmark: "Expected CTR by rounded average position; opportunity generated only from observed GSC rows.",
+    });
+
     const confidenceFromVolume = (impressions: number, base: number) => clamp(base + Math.min(15, impressions / 100), 45, 92);
 
     function score(parts: {
@@ -194,49 +222,59 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
       const topQueries = topQueriesForUrl(p.url);
       const hasReliableGsc = a.impressions >= 20 || a.clicks >= 3;
 
-      // CTR leak: page-one rankings with statistically meaningful impressions and CTR below conservative benchmark.
-      if (avgPos != null && avgPos <= 10 && a.impressions >= 50) {
-        const expected = EXPECTED_CTR[Math.round(avgPos)] ?? 0.02;
-        if (expected > 0 && ctr < expected * 0.7) {
-          const ctr_leak = clamp(((expected - ctr) / expected) * 100);
-          const estimatedLostClicks = Math.max(1, Math.round(a.impressions * Math.max(0, expected - ctr)));
-          opps.push({
-            site_id: site.id,
-            page_id: p.id,
-            type: "ctr_leak",
-            title: `CTR leak: ${estimatedLostClicks.toLocaleString()} estimated missed clicks`,
-            summary: `GSC shows ${a.impressions.toLocaleString()} impressions at average position ${avgPos.toFixed(1)} with ${(ctr * 100).toFixed(2)}% CTR; conservative benchmark is ~${(expected * 100).toFixed(1)}%.`,
-            evidence: { data_source: "GSC", date_range: `${last28Start} → ${last28End}`, impressions: a.impressions, clicks: a.clicks, ctr, expected_ctr: expected, avg_position: avgPos, estimated_lost_clicks: estimatedLostClicks, top_queries: topQueries },
-            recommended_action: "Rewrite title tag + meta description with stronger SERP magnets (numbers, brackets, intent words).",
-            validation_method: "Track CTR delta over next 28 days vs prior 28 days for the same queries.",
-            severity: ctr_leak > 60 ? 4 : 3,
-            impact_score: clamp(upside * 1.2 + ctr_leak * 0.4),
-            confidence_score: confidenceFromVolume(a.impressions, 72),
-            effort_score: 20,
-            risk_score: 15,
-            reversibility_score: 95,
-            priority: score({ traffic_upside: upside, ctr_leak, striking_distance: 0, decay: 0, monetization: 0, ai_answer: 0, internal_link_gap: 0, schema_gap: 0, safety: 0 }),
-            source_data: { ...sourceWindow, page_url: p.url, query_count: queryByUrl.get(p.url)?.size ?? 0, top_queries: topQueries },
-            generated_at: now,
-          });
-        }
+      const ctrCandidates = topQueries
+        .filter((q): q is QueryStat & { avg_position: number } => q.avg_position != null && q.avg_position <= 10 && q.impressions >= 10)
+        .map((q) => {
+          const expected = EXPECTED_CTR[Math.round(q.avg_position)] ?? 0.02;
+          const lostClicks = Math.round(q.impressions * Math.max(0, expected - q.ctr));
+          return { ...q, expected, lostClicks, leak: expected > 0 ? clamp(((expected - q.ctr) / expected) * 100) : 0 };
+        })
+        .filter((q) => q.expected > 0 && q.ctr < q.expected * 0.75 && q.lostClicks >= 1)
+        .sort((a, b) => b.lostClicks - a.lostClicks || b.impressions - a.impressions);
+
+      const bestCtr = ctrCandidates[0];
+      if (bestCtr) {
+        opps.push({
+          site_id: site.id,
+          page_id: p.id,
+          type: "ctr_leak",
+          title: `CTR leak on “${bestCtr.query}”: ${bestCtr.lostClicks.toLocaleString()} missed clicks`,
+          summary: `Observed query-level GSC data: ${bestCtr.impressions.toLocaleString()} impressions at position ${bestCtr.avg_position.toFixed(1)} with ${(bestCtr.ctr * 100).toFixed(2)}% CTR vs ${(bestCtr.expected * 100).toFixed(1)}% benchmark.`,
+          evidence: { ...evidenceBase(p.url), query: bestCtr.query, impressions: bestCtr.impressions, clicks: bestCtr.clicks, ctr: bestCtr.ctr, expected_ctr: bestCtr.expected, avg_position: bestCtr.avg_position, estimated_lost_clicks: bestCtr.lostClicks, top_queries: topQueries },
+          recommended_action: `Rewrite the title/meta around the exact query “${bestCtr.query}”; preserve the ranking URL and test one SERP-snippet change only.`,
+          validation_method: "Compare this exact query's CTR over the next 28 days against the current 28-day baseline.",
+          severity: bestCtr.leak > 60 ? 4 : 3,
+          impact_score: clamp(upside * 1.2 + bestCtr.leak * 0.4),
+          confidence_score: confidenceFromVolume(bestCtr.impressions, 70),
+          effort_score: 20,
+          risk_score: 12,
+          reversibility_score: 95,
+          priority: score({ traffic_upside: upside, ctr_leak: bestCtr.leak, striking_distance: 0, decay: 0, monetization: 0, ai_answer: 0, internal_link_gap: 0, schema_gap: 0, safety: 0 }),
+          source_data: { ...sourceWindow, page_url: p.url, query_count: queryByUrl.get(p.url)?.size ?? 0, top_queries: topQueries },
+          generated_at: now,
+        });
       }
 
-      // Striking distance: proven demand and ranking close enough to improve without SERP polling.
-      if (avgPos != null && avgPos >= 4 && avgPos <= 30 && a.impressions >= 20) {
-        const sd = clamp(100 - Math.max(0, avgPos - 4) * 3.2);
+      const strikingCandidates = topQueries
+        .filter((q): q is QueryStat & { avg_position: number } => q.avg_position != null && q.avg_position >= 4 && q.avg_position <= 30 && q.impressions >= 10)
+        .map((q) => ({ ...q, opportunity: q.impressions * Math.max(1, 31 - q.avg_position) }))
+        .sort((a, b) => b.opportunity - a.opportunity || b.impressions - a.impressions);
+
+      const bestStriking = strikingCandidates[0];
+      if (bestStriking) {
+        const sd = clamp(100 - Math.max(0, bestStriking.avg_position - 4) * 3.2);
         opps.push({
           site_id: site.id,
           page_id: p.id,
           type: "striking_distance",
-          title: `Striking distance: ${a.impressions.toLocaleString()} impressions at position ${avgPos.toFixed(1)}`,
-          summary: `GSC shows proven demand on this URL. The top queries are close enough that targeted updates can be prioritized before speculative work.`,
-          evidence: { data_source: "GSC", date_range: `${last28Start} → ${last28End}`, impressions: a.impressions, clicks: a.clicks, avg_position: avgPos, top_queries: topQueries },
-          recommended_action: "Update the page around the exact top-impression queries shown in evidence; strengthen headings, answer gaps, and internal links only where supported by those queries.",
-          validation_method: "Re-measure position and clicks after 4 weeks.",
+          title: `Striking distance on “${bestStriking.query}”: position ${bestStriking.avg_position.toFixed(1)}`,
+          summary: `This exact query has ${bestStriking.impressions.toLocaleString()} impressions and is close enough to prioritize targeted updates before speculative content work.`,
+          evidence: { ...evidenceBase(p.url), query: bestStriking.query, impressions: bestStriking.impressions, clicks: bestStriking.clicks, ctr: bestStriking.ctr, avg_position: bestStriking.avg_position, top_queries: topQueries },
+          recommended_action: `Improve the existing page for “${bestStriking.query}” using only query-supported changes: add/strengthen the matching section, answer the intent directly, and add relevant internal links.`,
+          validation_method: "Re-measure this query's average position and clicks after 28 days.",
           severity: 3,
           impact_score: clamp(upside * 1.5),
-          confidence_score: confidenceFromVolume(a.impressions, avgPos <= 15 ? 62 : 52),
+          confidence_score: confidenceFromVolume(bestStriking.impressions, bestStriking.avg_position <= 15 ? 64 : 54),
           effort_score: 45,
           risk_score: 10,
           reversibility_score: 90,
@@ -246,21 +284,23 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
         });
       }
 
-      // Decay: clicks down >30%
-      if (prev.clicks >= 20 && a.clicks < prev.clicks * 0.7) {
-        const decay = clamp(((prev.clicks - a.clicks) / prev.clicks) * 100);
+      // Decay: clicks or impressions down materially between comparable 28-day windows.
+      const clickDecay = prev.clicks >= 5 && a.clicks < prev.clicks * 0.7 ? ((prev.clicks - a.clicks) / prev.clicks) * 100 : 0;
+      const impressionDecay = prev.impressions >= 50 && a.impressions < prev.impressions * 0.65 ? ((prev.impressions - a.impressions) / prev.impressions) * 100 : 0;
+      if (clickDecay > 0 || impressionDecay > 0) {
+        const decay = clamp(Math.max(clickDecay, impressionDecay));
         opps.push({
           site_id: site.id,
           page_id: p.id,
           type: "decayed_page",
-          title: `Decayed page — clicks down ${decay.toFixed(0)}%`,
-          summary: `${prev.clicks} → ${a.clicks} clicks vs prior 28 days.`,
-          evidence: { data_source: "GSC", current_range: `${last28Start} → ${last28End}`, previous_range: `${prev28Start} → ${prev28End}`, clicks_prev: prev.clicks, clicks_now: a.clicks, impressions_prev: prev.impressions, impressions_now: a.impressions, top_queries: topQueries },
+          title: `Decay: ${decay.toFixed(0)}% drop vs prior 28 days`,
+          summary: `Comparable GSC windows show clicks ${prev.clicks} → ${a.clicks} and impressions ${prev.impressions} → ${a.impressions}.`,
+          evidence: { data_source: "GSC", current_range: `${last28Start} → ${last28End}`, previous_range: `${prev28Start} → ${prev28End}`, clicks_prev: prev.clicks, clicks_now: a.clicks, impressions_prev: prev.impressions, impressions_now: a.impressions, click_decay_pct: Number(clickDecay.toFixed(1)), impression_decay_pct: Number(impressionDecay.toFixed(1)), top_queries: topQueries },
           recommended_action: "Audit freshness: update dates, screenshots, prices; refresh intro and conclusion; resubmit URL.",
           validation_method: "Compare next-28-day clicks vs current 28-day baseline.",
           severity: decay > 60 ? 4 : 3,
           impact_score: clamp(prev.clicks / 5),
-          confidence_score: 75,
+          confidence_score: confidenceFromVolume(Math.max(prev.impressions, a.impressions), 68),
           effort_score: 35,
           risk_score: 15,
           reversibility_score: 90,
@@ -278,7 +318,7 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
           type: "indexation_risk",
           title: `Indexation risk on high-traffic page`,
           summary: `Page is noindexed, has canonical mismatch, or missing from sitemap, yet earns ${a.impressions} impressions.`,
-          evidence: { data_source: "GSC + page inventory", noindex: !!p.noindex, canonical_mismatch: !!p.canonical_mismatch, in_sitemap: !!p.in_sitemap, impressions: a.impressions, top_queries: topQueries },
+          evidence: { ...evidenceBase(p.url), inventory_source: "page inventory", noindex: !!p.noindex, canonical_mismatch: !!p.canonical_mismatch, in_sitemap: !!p.in_sitemap, impressions: a.impressions, top_queries: topQueries },
           recommended_action: "Verify intentional. If not, remove noindex, fix canonical, add to sitemap, request re-indexing.",
           validation_method: "Inspect URL in Search Console after fix; monitor impressions.",
           severity: 5,
@@ -288,7 +328,7 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
           risk_score: 25,
           reversibility_score: 95,
           priority: score({ traffic_upside: upside, ctr_leak: 0, striking_distance: 0, decay: 0, monetization: 0, ai_answer: 0, internal_link_gap: 0, schema_gap: 0, safety: 90 }),
-          source_data: {},
+          source_data: { ...sourceWindow, page_url: p.url, top_queries: topQueries },
           generated_at: now,
         });
       }
@@ -301,7 +341,7 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
           type: "internal_link_gap",
           title: `No inbound internal links`,
           summary: `Page has 0 inbound internal links from other pages on this site.`,
-          evidence: { inbound_links: 0, impressions: a.impressions, word_count: p.word_count },
+          evidence: { ...evidenceBase(p.url), inbound_links: 0, impressions: a.impressions, word_count: p.word_count, top_queries: topQueries },
           recommended_action: "Add 3–5 contextual internal links from related high-authority pages.",
           validation_method: "Re-crawl and confirm inbound count > 0; observe impressions over 4 weeks.",
           severity: 2,
@@ -311,7 +351,7 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
           risk_score: 5,
           reversibility_score: 100,
           priority: score({ traffic_upside: upside, ctr_leak: 0, striking_distance: 0, decay: 0, monetization: 0, ai_answer: 0, internal_link_gap: 80, schema_gap: 0, safety: 0 }),
-          source_data: {},
+          source_data: { ...sourceWindow, page_url: p.url, top_queries: topQueries },
           generated_at: now,
         });
       }
@@ -324,7 +364,7 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
           type: "schema_gap",
           title: `No JSON-LD schema detected`,
           summary: `Page earns traffic but emits no structured data.`,
-          evidence: { schema_jsonld_count: 0, impressions: a.impressions },
+          evidence: { ...evidenceBase(p.url), schema_jsonld_count: 0, impressions: a.impressions, top_queries: topQueries },
           recommended_action: "Add Article / Product / FAQ / HowTo JSON-LD aligned to visible page content.",
           validation_method: "Validate with Rich Results Test; monitor SERP appearance.",
           severity: 2,
@@ -334,7 +374,7 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
           risk_score: 10,
           reversibility_score: 100,
           priority: score({ traffic_upside: upside, ctr_leak: 0, striking_distance: 0, decay: 0, monetization: 0, ai_answer: 0, internal_link_gap: 0, schema_gap: 80, safety: 0 }),
-          source_data: {},
+          source_data: { ...sourceWindow, page_url: p.url, top_queries: topQueries },
           generated_at: now,
         });
       }
@@ -347,7 +387,7 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
           type: "ai_answer_gap",
           title: `AI-answer readiness gap`,
           summary: `Long-form page lacking concise TL;DR + FAQ block — weak for AI citation.`,
-          evidence: { word_count: p.word_count, impressions: a.impressions },
+          evidence: { ...evidenceBase(p.url), word_count: p.word_count, impressions: a.impressions, top_queries: topQueries },
           recommended_action: "Add a 50–80 word TL;DR at top and a 5-question FAQ at bottom with explicit Q/A structure.",
           validation_method: "Re-run AI visibility check 4 weeks later (when AI module enabled).",
           severity: 2,
@@ -357,7 +397,7 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
           risk_score: 5,
           reversibility_score: 100,
           priority: score({ traffic_upside: upside, ctr_leak: 0, striking_distance: 0, decay: 0, monetization: 0, ai_answer: 70, internal_link_gap: 0, schema_gap: 0, safety: 0 }),
-          source_data: {},
+          source_data: { ...sourceWindow, page_url: p.url, top_queries: topQueries },
           generated_at: now,
         });
       }
@@ -370,7 +410,7 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
           type: "monetization_leak",
           title: `Traffic without monetization`,
           summary: `${a.clicks} clicks/28d but page has no affiliate or commerce link.`,
-          evidence: { clicks: a.clicks, affiliate_links: 0 },
+          evidence: { ...evidenceBase(p.url), clicks: a.clicks, affiliate_links: 0, top_queries: topQueries },
           recommended_action: "Add 1–3 contextual affiliate or product links matched to the page intent.",
           validation_method: "Track outbound clicks + revenue per URL after 30 days.",
           severity: 3,
@@ -380,7 +420,7 @@ export const scoreOpportunities = createServerFn({ method: "POST" })
           risk_score: 15,
           reversibility_score: 100,
           priority: score({ traffic_upside: upside, ctr_leak: 0, striking_distance: 0, decay: 0, monetization: 80, ai_answer: 0, internal_link_gap: 0, schema_gap: 0, safety: 0 }),
-          source_data: {},
+          source_data: { ...sourceWindow, page_url: p.url, top_queries: topQueries },
           generated_at: now,
         });
       }
