@@ -6,6 +6,7 @@ import { Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { OpportunityQueue, PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
+import { useSiteScope } from "@/hooks/use-site-scope";
 
 export const Route = createFileRoute("/_authenticated/ai-visibility")({
   component: AIVisibilityPage,
