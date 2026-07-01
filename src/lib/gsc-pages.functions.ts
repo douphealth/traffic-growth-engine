@@ -135,7 +135,6 @@ export const importAllConnectedGscProperties = createServerFn({ method: "POST" }
   .handler(async ({ context }) => {
     const { supabase } = context;
     const { importGscData } = await import("@/lib/gsc.functions");
-    const { scoreOpportunities } = await import("@/lib/opportunities.functions");
 
     const { data: orgs } = await supabase
       .from("organization_members")
