@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { OpportunityQueue, PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
 import { toast } from "sonner";
+import { useSiteScope } from "@/hooks/use-site-scope";
 
 export const Route = createFileRoute("/_authenticated/validation")({
   component: ValidationPage,
@@ -15,14 +16,17 @@ export const Route = createFileRoute("/_authenticated/validation")({
 
 function ValidationPage() {
   const qc = useQueryClient();
+  const { siteId } = useSiteScope();
   const q = useQuery({
-    queryKey: ["validation-runs"],
+    queryKey: ["validation-runs", siteId ?? "all"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let req = supabase
         .from("validation_runs")
         .select("id, passed, checks, blocking_failures, warnings, ran_at, content_diffs(id, proposed_title, status, site_id, page_id, pages(url))")
         .order("ran_at", { ascending: false })
         .limit(100);
+      if (siteId) req = req.eq("site_id", siteId);
+      const { data, error } = await req;
       if (error) throw error;
       return data ?? [];
     },

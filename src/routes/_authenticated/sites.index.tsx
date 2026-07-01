@@ -17,6 +17,7 @@ import { scoreOpportunities } from "@/lib/opportunities.functions";
 import { testWordpressConnection } from "@/lib/sites.functions";
 import { getPipelineHealth, type SitePipelineHealth } from "@/lib/quality.functions";
 import { importAllConnectedGscProperties } from "@/lib/gsc-pages.functions";
+import { useSiteScope } from "@/hooks/use-site-scope";
 
 export const Route = createFileRoute("/_authenticated/sites/")({
   component: SitesPage,
@@ -70,12 +71,14 @@ function SitesPage() {
     return map;
   }, [healthQ.data]);
 
+  const { siteId: scopeSiteId } = useSiteScope();
   const visibleSites = useMemo(() => {
     const rows = sitesQ.data ?? [];
-    if (!healthQ.data?.sites.length) return rows;
-    const canonical = new Set(healthQ.data.sites.map((h) => h.canonical_site_id));
-    return rows.filter((s) => canonical.has(s.id) || !healthBySiteId.has(s.id));
-  }, [healthBySiteId, healthQ.data, sitesQ.data]);
+    const canonical = healthQ.data?.sites.length ? new Set(healthQ.data.sites.map((h) => h.canonical_site_id)) : null;
+    let filtered = canonical ? rows.filter((s) => canonical.has(s.id) || !healthBySiteId.has(s.id)) : rows;
+    if (scopeSiteId) filtered = filtered.filter((s) => s.id === scopeSiteId);
+    return filtered;
+  }, [healthBySiteId, healthQ.data, sitesQ.data, scopeSiteId]);
 
   return (
     <>

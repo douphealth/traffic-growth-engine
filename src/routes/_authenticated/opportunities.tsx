@@ -13,6 +13,7 @@ import { scoreOpportunities } from "@/lib/opportunities.functions";
 import { syncPagesFromGsc, importAllConnectedGscProperties } from "@/lib/gsc-pages.functions";
 import { toast } from "sonner";
 import { getPipelineHealth } from "@/lib/quality.functions";
+import { useSiteScope } from "@/hooks/use-site-scope";
 
 
 export const Route = createFileRoute("/_authenticated/opportunities")({
@@ -57,12 +58,18 @@ type OppRow = {
 
 function OpportunityBoard() {
   const qc = useQueryClient();
+  const { siteId: scopeSiteId } = useSiteScope();
   const [type, setType] = useState("all");
-  const [siteId, setSiteId] = useState("all");
+  const [siteId, setSiteId] = useState<string>(scopeSiteId ?? "all");
   const [risk, setRisk] = useState("all");
   const [confidence, setConfidence] = useState("all");
   const [status, setStatus] = useState("open");
   const [q, setQ] = useState("");
+
+  // Sync local filter with global scope changes
+  useEffect(() => {
+    setSiteId(scopeSiteId ?? "all");
+  }, [scopeSiteId]);
 
   const sitesQ = useQuery({
     queryKey: ["sites-mini"],
@@ -78,9 +85,9 @@ function OpportunityBoard() {
   });
 
   const oppsQ = useQuery({
-    queryKey: ["opportunities", status],
+    queryKey: ["opportunities", status, siteId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let req = supabase
         .from("opportunities")
         .select(
           "id, site_id, page_id, type, title, summary, evidence, source_data, recommended_action, validation_method, severity, impact_score, confidence_score, effort_score, risk_score, reversibility_score, priority, status, generated_at, page:pages(url, title), site:sites(name)",
@@ -88,6 +95,8 @@ function OpportunityBoard() {
         .eq("status", status as never)
         .order("priority", { ascending: false })
         .limit(200);
+      if (siteId !== "all") req = req.eq("site_id", siteId);
+      const { data, error } = await req;
       if (error) throw error;
       return (data ?? []) as unknown as OppRow[];
     },

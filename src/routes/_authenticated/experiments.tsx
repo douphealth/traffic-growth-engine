@@ -5,20 +5,24 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { OpportunityQueue, PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
+import { useSiteScope } from "@/hooks/use-site-scope";
 
 export const Route = createFileRoute("/_authenticated/experiments")({
   component: ExperimentsPage,
 });
 
 function ExperimentsPage() {
+  const { siteId } = useSiteScope();
   const q = useQuery({
-    queryKey: ["experiments"],
+    queryKey: ["experiments", siteId ?? "all"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let req = supabase
         .from("experiments")
         .select("id, hypothesis, status, current_result, implementation_date, pages(url)")
         .order("created_at", { ascending: false })
         .limit(200);
+      if (siteId) req = req.eq("site_id", siteId);
+      const { data, error } = await req;
       if (error) throw error;
       return data ?? [];
     },

@@ -4,21 +4,25 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { OpportunityQueue, PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
+import { useSiteScope } from "@/hooks/use-site-scope";
 
 export const Route = createFileRoute("/_authenticated/revenue")({
   component: RevenuePage,
 });
 
 function RevenuePage() {
+  const { siteId } = useSiteScope();
   const q = useQuery({
-    queryKey: ["revenue-clicks"],
+    queryKey: ["revenue-clicks", siteId ?? "all"],
     queryFn: async () => {
       const since = new Date(Date.now() - 28 * 86400000).toISOString().slice(0, 10);
-      const { data, error } = await supabase
+      let req = supabase
         .from("gsc_page_query_daily")
         .select("url, clicks, impressions")
         .gte("date", since)
         .limit(50000);
+      if (siteId) req = req.eq("site_id", siteId);
+      const { data, error } = await req;
       if (error) throw error;
       const agg = new Map<string, { clicks: number; impressions: number }>();
       for (const r of data ?? []) {

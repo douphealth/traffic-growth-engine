@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { OpportunityQueue, PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
 import { toast } from "sonner";
+import { useSiteScope } from "@/hooks/use-site-scope";
 
 export const Route = createFileRoute("/_authenticated/schema")({
   component: SchemaPage,
@@ -14,14 +15,17 @@ export const Route = createFileRoute("/_authenticated/schema")({
 
 function SchemaPage() {
   const qc = useQueryClient();
+  const { siteId } = useSiteScope();
   const q = useQuery({
-    queryKey: ["schema-items"],
+    queryKey: ["schema-items", siteId ?? "all"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let req = supabase
         .from("schema_items")
         .select("id, schema_type, visible_evidence_ok, status, pages(url)")
         .order("created_at", { ascending: false })
         .limit(500);
+      if (siteId) req = req.eq("site_id", siteId);
+      const { data, error } = await req;
       if (error) throw error;
       return data ?? [];
     },

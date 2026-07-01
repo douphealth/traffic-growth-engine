@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
 import { ArrowRight } from "lucide-react";
+import { useSiteScope } from "@/hooks/use-site-scope";
 
 export const Route = createFileRoute("/_authenticated/keywords")({
   component: KeywordsPage,
@@ -24,15 +25,18 @@ type Row = {
 };
 
 function KeywordsPage() {
+  const { siteId } = useSiteScope();
   const q = useQuery({
-    queryKey: ["keywords-gsc"],
+    queryKey: ["keywords-gsc", siteId ?? "all"],
     queryFn: async () => {
       const since = new Date(Date.now() - 28 * 86400000).toISOString().slice(0, 10);
-      const { data, error } = await supabase
+      let req = supabase
         .from("gsc_page_query_daily")
         .select("site_id, url, query, clicks, impressions, position")
         .gte("date", since)
         .limit(50000);
+      if (siteId) req = req.eq("site_id", siteId);
+      const { data, error } = await req;
       if (error) throw error;
       const agg = new Map<string, { site_id: string | null; clicks: number; impressions: number; posSum: number; n: number; urls: Map<string, number> }>();
       for (const r of data ?? []) {

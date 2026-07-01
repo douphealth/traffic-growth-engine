@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { importAllConnectedGscProperties } from "@/lib/gsc-pages.functions";
 import { scoreOpportunities } from "@/lib/opportunities.functions";
 import { getPipelineHealth } from "@/lib/quality.functions";
+import { useSiteScope } from "@/hooks/use-site-scope";
 
 export const OPPORTUNITY_LABEL: Record<string, string> = {
   ctr_leak: "CTR leak",
@@ -46,6 +47,7 @@ type OpsOpportunity = {
 
 export function PipelineActions({ scope = "full" }: { scope?: "full" | "compact" }) {
   const qc = useQueryClient();
+  const { siteId, sites: scopedSites, currentSite } = useSiteScope();
   const sitesQ = useQuery({
     queryKey: ["sites-mini-actions"],
     queryFn: async () => {
@@ -66,13 +68,15 @@ export function PipelineActions({ scope = "full" }: { scope?: "full" | "compact"
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const scoreAll = useMutation({
+  const scoreScoped = useMutation({
     mutationFn: async () => {
-      const sites = sitesQ.data ?? [];
-      if (!sites.length) throw new Error("No sites connected yet.");
+      const list = sitesQ.data ?? scopedSites;
+      if (!list.length) throw new Error("No sites connected yet.");
+      const targets = siteId ? list.filter((s) => s.id === siteId) : list;
+      if (!targets.length) throw new Error("Scoped site not found.");
       let inserted = 0;
       const failures: string[] = [];
-      for (const site of sites) {
+      for (const site of targets) {
         try {
           const r = await scoreOpportunities({ data: { site_id: site.id } });
           inserted += r.inserted;
@@ -91,15 +95,17 @@ export function PipelineActions({ scope = "full" }: { scope?: "full" | "compact"
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const scoreLabel = siteId && currentSite ? `Rescore · ${currentSite.name}` : "Rescore all sites";
+
   return (
     <div className="flex flex-wrap gap-2">
       <Button onClick={() => importAll.mutate()} disabled={importAll.isPending} size={scope === "compact" ? "sm" : "default"}>
         {importAll.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <BarChart3 className="mr-1.5 h-3.5 w-3.5" />}
         Run full GSC pipeline
       </Button>
-      <Button variant="outline" onClick={() => scoreAll.mutate()} disabled={scoreAll.isPending || importAll.isPending} size={scope === "compact" ? "sm" : "default"}>
-        {scoreAll.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Target className="mr-1.5 h-3.5 w-3.5" />}
-        Rescore opportunities
+      <Button variant="outline" onClick={() => scoreScoped.mutate()} disabled={scoreScoped.isPending || importAll.isPending} size={scope === "compact" ? "sm" : "default"}>
+        {scoreScoped.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Target className="mr-1.5 h-3.5 w-3.5" />}
+        {scoreLabel}
       </Button>
       <Button variant="outline" asChild size={scope === "compact" ? "sm" : "default"}>
         <Link to="/gsc/connect">
@@ -112,9 +118,9 @@ export function PipelineActions({ scope = "full" }: { scope?: "full" | "compact"
 }
 
 export function PipelineCommandCenter({ focus }: { focus?: string }) {
+  const { siteId, currentSite } = useSiteScope();
   const healthQ = useQuery({ queryKey: ["pipeline-health"], queryFn: () => getPipelineHealth() });
   const health = healthQ.data;
-  const worst = health?.sites.find((site) => site.status !== "ready");
 
   if (healthQ.isLoading) return <p className="text-sm text-muted-foreground">Loading pipeline health…</p>;
 
@@ -132,6 +138,21 @@ export function PipelineCommandCenter({ focus }: { focus?: string }) {
     );
   }
 
+  const scopedSites = siteId ? health.sites.filter((s) => s.canonical_site_id === siteId) : health.sites;
+  const totals = siteId
+    ? scopedSites.reduce(
+        (acc, s) => ({
+          sites: 1,
+          gsc_rows: acc.gsc_rows + s.gsc_rows,
+          pages: acc.pages + s.pages,
+          opportunities: acc.opportunities + s.opportunities,
+          average_quality: s.quality_score,
+        }),
+        { sites: 0, gsc_rows: 0, pages: 0, opportunities: 0, average_quality: 0 },
+      )
+    : health.totals;
+  const worst = scopedSites.find((s) => s.status !== "ready");
+
   return (
     <Card className={worst ? "border-warning/40" : "border-success/30"}>
       <CardHeader className="pb-3">
@@ -139,7 +160,9 @@ export function PipelineCommandCenter({ focus }: { focus?: string }) {
           <div>
             <div className="flex items-center gap-2">
               {worst ? <ShieldAlert className="h-4 w-4 text-warning" /> : <CheckCircle2 className="h-4 w-4 text-success" />}
-              <CardTitle className="text-base">Operational command center</CardTitle>
+              <CardTitle className="text-base">
+                {currentSite ? `${currentSite.name} · command center` : "Operational command center"}
+              </CardTitle>
             </div>
             <CardDescription className="mt-1">
               {focus ?? "Run the real-data pipeline before reviewing recommendations."}
@@ -152,16 +175,16 @@ export function PipelineCommandCenter({ focus }: { focus?: string }) {
         <div className="rounded-md border border-border bg-muted/20 p-3">
           <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Data quality</div>
           <div className="mt-1 flex items-end gap-2">
-            <span className="text-3xl font-semibold tabular-nums">{health.totals.average_quality}</span>
+            <span className="text-3xl font-semibold tabular-nums">{totals.average_quality}</span>
             <span className="pb-1 text-xs text-muted-foreground">/100</span>
           </div>
-          <Progress value={health.totals.average_quality} className="mt-2 h-1.5" />
+          <Progress value={totals.average_quality} className="mt-2 h-1.5" />
         </div>
         <div className="grid gap-2 sm:grid-cols-4">
-          <Metric label="Sites" value={health.totals.sites} />
-          <Metric label="GSC rows" value={health.totals.gsc_rows} />
-          <Metric label="Pages" value={health.totals.pages} />
-          <Metric label="Open actions" value={health.totals.opportunities} tone="warning" />
+          <Metric label={siteId ? "Site" : "Sites"} value={totals.sites} />
+          <Metric label="GSC rows" value={totals.gsc_rows} />
+          <Metric label="Pages" value={totals.pages} />
+          <Metric label="Open actions" value={totals.opportunities} tone="warning" />
         </div>
         {worst?.issues[0] && (
           <p className="md:col-span-2 text-xs text-muted-foreground">
@@ -188,8 +211,9 @@ export function OpportunityQueue({
   emptyDescription?: string;
   limit?: number;
 }) {
+  const { siteId } = useSiteScope();
   const q = useQuery({
-    queryKey: ["ops-opportunity-queue", types?.join("|") ?? "all", limit],
+    queryKey: ["ops-opportunity-queue", types?.join("|") ?? "all", limit, siteId ?? "all"],
     queryFn: async () => {
       let req = supabase
         .from("opportunities")
@@ -198,6 +222,7 @@ export function OpportunityQueue({
         .order("priority", { ascending: false })
         .limit(limit);
       if (types?.length) req = req.in("type", types as never);
+      if (siteId) req = req.eq("site_id", siteId);
       const { data, error } = await req;
       if (error) throw error;
       return (data ?? []) as unknown as OpsOpportunity[];

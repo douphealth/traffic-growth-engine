@@ -6,17 +6,21 @@ import { Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { OpportunityQueue, PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
+import { useSiteScope } from "@/hooks/use-site-scope";
 
 export const Route = createFileRoute("/_authenticated/ai-visibility")({
   component: AIVisibilityPage,
 });
 
 function AIVisibilityPage() {
+  const { siteId } = useSiteScope();
   const q = useQuery({
-    queryKey: ["ai-visibility"],
+    queryKey: ["ai-visibility", siteId ?? "all"],
     queryFn: async () => {
+      let promptsReq = supabase.from("ai_visibility_prompts").select("id, prompt, active").eq("active", true);
+      if (siteId) promptsReq = promptsReq.eq("site_id", siteId);
       const [prompts, runs] = await Promise.all([
-        supabase.from("ai_visibility_prompts").select("id, prompt, active").eq("active", true),
+        promptsReq,
         supabase.from("ai_visibility_runs").select("prompt_id, brand_mentioned, competitor_mentions, model"),
       ]);
       if (prompts.error) throw prompts.error;
