@@ -830,7 +830,10 @@ export type Database = {
           ctr: number | null
           date: string
           device: string | null
+          gsc_property_id: string | null
           id: number
+          import_source: string
+          imported_at: string
           impressions: number | null
           position: number | null
           query: string
@@ -843,7 +846,10 @@ export type Database = {
           ctr?: number | null
           date: string
           device?: string | null
+          gsc_property_id?: string | null
           id?: number
+          import_source?: string
+          imported_at?: string
           impressions?: number | null
           position?: number | null
           query: string
@@ -856,7 +862,10 @@ export type Database = {
           ctr?: number | null
           date?: string
           device?: string | null
+          gsc_property_id?: string | null
           id?: number
+          import_source?: string
+          imported_at?: string
           impressions?: number | null
           position?: number | null
           query?: string
@@ -864,6 +873,13 @@ export type Database = {
           url?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "gsc_page_query_daily_gsc_property_id_fkey"
+            columns: ["gsc_property_id"]
+            isOneToOne: false
+            referencedRelation: "gsc_properties"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "gsc_page_query_daily_site_id_fkey"
             columns: ["site_id"]
@@ -1395,9 +1411,12 @@ export type Database = {
           canonical_mismatch: boolean | null
           content_hash: string | null
           created_at: string
+          discovery_source: string | null
           embedding: string | null
           excerpt: string | null
           extracted: Json | null
+          gsc_first_seen_at: string | null
+          gsc_last_seen_at: string | null
           health_score: number | null
           id: string
           in_sitemap: boolean | null
@@ -1427,9 +1446,12 @@ export type Database = {
           canonical_mismatch?: boolean | null
           content_hash?: string | null
           created_at?: string
+          discovery_source?: string | null
           embedding?: string | null
           excerpt?: string | null
           extracted?: Json | null
+          gsc_first_seen_at?: string | null
+          gsc_last_seen_at?: string | null
           health_score?: number | null
           id?: string
           in_sitemap?: boolean | null
@@ -1459,9 +1481,12 @@ export type Database = {
           canonical_mismatch?: boolean | null
           content_hash?: string | null
           created_at?: string
+          discovery_source?: string | null
           embedding?: string | null
           excerpt?: string | null
           extracted?: Json | null
+          gsc_first_seen_at?: string | null
+          gsc_last_seen_at?: string | null
           health_score?: number | null
           id?: string
           in_sitemap?: boolean | null
@@ -1901,10 +1926,13 @@ export type Database = {
       sites: {
         Row: {
           base_url: string
+          canonical_host: string | null
           created_at: string
+          data_quality_status: string
           ga4_property_id: string | null
           gsc_property: string | null
           id: string
+          last_pipeline_run_at: string | null
           llms_txt_url: string | null
           name: string
           org_id: string
@@ -1916,10 +1944,13 @@ export type Database = {
         }
         Insert: {
           base_url: string
+          canonical_host?: string | null
           created_at?: string
+          data_quality_status?: string
           ga4_property_id?: string | null
           gsc_property?: string | null
           id?: string
+          last_pipeline_run_at?: string | null
           llms_txt_url?: string | null
           name: string
           org_id: string
@@ -1931,10 +1962,13 @@ export type Database = {
         }
         Update: {
           base_url?: string
+          canonical_host?: string | null
           created_at?: string
+          data_quality_status?: string
           ga4_property_id?: string | null
           gsc_property?: string | null
           id?: string
+          last_pipeline_run_at?: string | null
           llms_txt_url?: string | null
           name?: string
           org_id?: string
@@ -2092,6 +2126,7 @@ export type Database = {
       }
       is_org_admin: { Args: { _org_id: string }; Returns: boolean }
       is_org_member: { Args: { _org_id: string }; Returns: boolean }
+      normalize_site_identity: { Args: { _url: string }; Returns: string }
       read_google_token: {
         Args: { _connection_id: string; _key: string; _kind: string }
         Returns: string
