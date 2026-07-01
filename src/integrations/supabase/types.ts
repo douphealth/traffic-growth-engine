@@ -2129,6 +2129,10 @@ export type Database = {
       }
       is_org_admin: { Args: { _org_id: string }; Returns: boolean }
       is_org_member: { Args: { _org_id: string }; Returns: boolean }
+      merge_site_into: {
+        Args: { _loser: string; _target: string }
+        Returns: Json
+      }
       normalize_site_identity: { Args: { _url: string }; Returns: string }
       read_google_token: {
         Args: { _connection_id: string; _key: string; _kind: string }
