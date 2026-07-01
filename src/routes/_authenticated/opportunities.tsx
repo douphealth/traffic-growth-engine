@@ -85,9 +85,9 @@ function OpportunityBoard() {
   });
 
   const oppsQ = useQuery({
-    queryKey: ["opportunities", status],
+    queryKey: ["opportunities", status, siteId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let req = supabase
         .from("opportunities")
         .select(
           "id, site_id, page_id, type, title, summary, evidence, source_data, recommended_action, validation_method, severity, impact_score, confidence_score, effort_score, risk_score, reversibility_score, priority, status, generated_at, page:pages(url, title), site:sites(name)",
@@ -95,6 +95,8 @@ function OpportunityBoard() {
         .eq("status", status as never)
         .order("priority", { ascending: false })
         .limit(200);
+      if (siteId !== "all") req = req.eq("site_id", siteId);
+      const { data, error } = await req;
       if (error) throw error;
       return (data ?? []) as unknown as OppRow[];
     },
