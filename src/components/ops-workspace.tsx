@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, BarChart3, CheckCircle2, ExternalLink, Loader2, RefreshCw, ShieldAlert, Target } from "lucide-react";
+import { ArrowRight, BarChart3, CheckCircle2, ExternalLink, FileText, Loader2, RefreshCw, ShieldAlert, Target, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { EmptyState } from "@/components/page-header";
@@ -228,8 +228,62 @@ export function OpportunityQueue({
 }
 
 function OpportunityQueueItem({ opportunity }: { opportunity: OpsOpportunity }) {
+  const qc = useQueryClient();
   const evidence = { ...(opportunity.source_data ?? {}), ...(opportunity.evidence ?? {}) };
   const topQueries = Array.isArray(evidence.top_queries) ? evidence.top_queries.slice(0, 3) as Array<Record<string, unknown>> : [];
+  const targetQueries = topQueries.map((q) => String(q.query ?? "")).filter(Boolean);
+
+  const setStatus = useMutation({
+    mutationFn: async (status: "in_progress" | "dismissed") => {
+      const { error } = await supabase.from("opportunities").update({ status }).eq("id", opportunity.id);
+      if (error) throw error;
+      return status;
+    },
+    onSuccess: (status) => {
+      toast.success(status === "dismissed" ? "Opportunity dismissed" : "Opportunity marked in progress");
+      invalidateOps(qc);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const createBrief = useMutation({
+    mutationFn: async () => {
+      const existing = await supabase
+        .from("content_briefs")
+        .select("id")
+        .eq("opportunity_id", opportunity.id)
+        .maybeSingle();
+      if (existing.error) throw existing.error;
+      if (existing.data?.id) return { reused: true };
+
+      const { data: userData } = await supabase.auth.getUser();
+      const { error } = await supabase.from("content_briefs").insert({
+        site_id: opportunity.site_id,
+        page_id: opportunity.page_id,
+        opportunity_id: opportunity.id,
+        created_by: userData.user?.id ?? null,
+        status: "ready",
+        target_url: opportunity.page?.url ?? null,
+        intent: OPPORTUNITY_LABEL[opportunity.type] ?? opportunity.type,
+        target_queries: targetQueries,
+        recommended_sections: [opportunity.recommended_action ?? opportunity.summary ?? opportunity.title],
+        validation_checklist: [
+          "Use only imported Search Console evidence.",
+          "Preserve existing affiliate links, tables, images, buttons, and claims.",
+          "Create a reversible diff and pass validation before publishing.",
+        ],
+      });
+      if (error) throw error;
+      await supabase.from("opportunities").update({ status: "in_progress" }).eq("id", opportunity.id);
+      return { reused: false };
+    },
+    onSuccess: (r) => {
+      toast.success(r.reused ? "A brief already exists for this opportunity" : "Content brief created");
+      qc.invalidateQueries({ queryKey: ["content-briefs"] });
+      invalidateOps(qc);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   return (
     <div className="rounded-md border border-border bg-card/50 p-3">
@@ -275,6 +329,13 @@ function OpportunityQueueItem({ opportunity }: { opportunity: OpsOpportunity }) 
             </a>
           </Button>
         )}
+        <Button variant="outline" size="sm" onClick={() => createBrief.mutate()} disabled={createBrief.isPending || setStatus.isPending}>
+          {createBrief.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FileText className="mr-1.5 h-3.5 w-3.5" />}
+          Create brief
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setStatus.mutate("dismissed")} disabled={createBrief.isPending || setStatus.isPending}>
+          <XCircle className="mr-1.5 h-3.5 w-3.5" /> Dismiss
+        </Button>
         <Button size="sm" asChild>
           <Link to="/opportunities">Review evidence</Link>
         </Button>
