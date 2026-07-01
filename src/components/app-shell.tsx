@@ -40,6 +40,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import type { ReactNode } from "react";
+import { SiteScopeProvider, SiteScopeSelector } from "@/hooks/use-site-scope";
 
 const primary = [
   { title: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
