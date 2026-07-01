@@ -17,6 +17,7 @@ import { scoreOpportunities } from "@/lib/opportunities.functions";
 import { testWordpressConnection } from "@/lib/sites.functions";
 import { getPipelineHealth, type SitePipelineHealth } from "@/lib/quality.functions";
 import { importAllConnectedGscProperties } from "@/lib/gsc-pages.functions";
+import { useSiteScope } from "@/hooks/use-site-scope";
 
 export const Route = createFileRoute("/_authenticated/sites/")({
   component: SitesPage,
