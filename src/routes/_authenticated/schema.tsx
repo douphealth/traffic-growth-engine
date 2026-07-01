@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { OpportunityQueue, PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
 
 export const Route = createFileRoute("/_authenticated/schema")({
   component: SchemaPage,
@@ -27,14 +28,24 @@ function SchemaPage() {
     <>
       <PageHeader
         title="Schema"
-        description="Schema is only recommended when supported by visible content. Fake ratings, unsupported reviews, and schema/content mismatch are blocked at validation."
+        description="Structured-data queue from real page evidence. Recommendations stay conservative: visible content must support every schema field."
+        actions={<PipelineActions />}
       />
       <PageBody>
+        <PipelineCommandCenter focus="Prioritize schema only when a page has traffic and enough visible content evidence." />
+        <OpportunityQueue
+          types={["schema_gap", "indexation_risk"]}
+          title="Schema and indexability action queue"
+          description="Traffic-backed pages where structured data or indexability deserves attention."
+          emptyTitle="No schema/indexability actions yet"
+          emptyDescription="Import WordPress inventory and run scoring to detect schema gaps and indexability risks."
+        />
         {q.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {q.data && q.data.length === 0 && (
           <EmptyState
             title="No schema findings yet"
             description="Schema items are detected when WordPress inventory is imported and pages are parsed for JSON-LD. Import inventory on a site to populate this view."
+            action={<PipelineActions scope="compact" />}
           />
         )}
         {q.data && q.data.length > 0 && (

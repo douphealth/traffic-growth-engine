@@ -12,6 +12,7 @@ import {
   Settings,
   LogOut,
   Activity,
+  SlidersHorizontal,
   ShieldCheck,
   Send,
   Code2,
@@ -37,7 +38,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { useDemoMode } from "@/hooks/use-demo-mode";
 import { toast } from "sonner";
 import type { ReactNode } from "react";
 
@@ -54,6 +54,7 @@ const primary = [
 ] as const;
 
 const secondary = [
+  { title: "Operations", to: "/operations", icon: SlidersHorizontal },
   { title: "GSC Connector", to: "/gsc/connect", icon: SearchIcon },
   { title: "Validation", to: "/validation", icon: ShieldCheck },
   { title: "Publishing Queue", to: "/publishing", icon: Send },
@@ -104,7 +105,7 @@ function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel>Operations</SidebarGroupLabel>}
+          {!collapsed && <SidebarGroupLabel>Control Center</SidebarGroupLabel>}
           <SidebarGroupContent>
             <SidebarMenu>
               {secondary.map((item) => (
@@ -136,7 +137,6 @@ function AppSidebar() {
 export function AppShell({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [demo] = useDemoMode();
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -149,11 +149,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-h-screen w-full bg-background">
         <AppSidebar />
         <div className="flex flex-1 flex-col min-w-0">
-          {demo && (
-            <div className="border-b border-warning/40 bg-warning/10 px-4 py-1.5 text-center text-[11px] font-medium text-warning">
-              Demo mode is ON — screens that lack real data show mock fixtures. Toggle off in Settings.
-            </div>
-          )}
           <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
             <div className="flex items-center gap-2">
               <SidebarTrigger />

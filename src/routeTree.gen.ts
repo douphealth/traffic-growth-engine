@@ -18,6 +18,7 @@ import { Route as AuthenticatedSchemaRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedRevenueRouteImport } from './routes/_authenticated/revenue'
 import { Route as AuthenticatedPublishingRouteImport } from './routes/_authenticated/publishing'
 import { Route as AuthenticatedOpportunitiesRouteImport } from './routes/_authenticated/opportunities'
+import { Route as AuthenticatedOperationsRouteImport } from './routes/_authenticated/operations'
 import { Route as AuthenticatedMonetizationRouteImport } from './routes/_authenticated/monetization'
 import { Route as AuthenticatedKeywordsRouteImport } from './routes/_authenticated/keywords'
 import { Route as AuthenticatedInternalLinksRouteImport } from './routes/_authenticated/internal-links'
@@ -75,6 +76,11 @@ const AuthenticatedOpportunitiesRoute =
     path: '/opportunities',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedOperationsRoute = AuthenticatedOperationsRouteImport.update({
+  id: '/operations',
+  path: '/operations',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedMonetizationRoute =
   AuthenticatedMonetizationRouteImport.update({
     id: '/monetization',
@@ -147,6 +153,7 @@ export interface FileRoutesByFullPath {
   '/internal-links': typeof AuthenticatedInternalLinksRoute
   '/keywords': typeof AuthenticatedKeywordsRoute
   '/monetization': typeof AuthenticatedMonetizationRoute
+  '/operations': typeof AuthenticatedOperationsRoute
   '/opportunities': typeof AuthenticatedOpportunitiesRoute
   '/publishing': typeof AuthenticatedPublishingRoute
   '/revenue': typeof AuthenticatedRevenueRoute
@@ -168,6 +175,7 @@ export interface FileRoutesByTo {
   '/internal-links': typeof AuthenticatedInternalLinksRoute
   '/keywords': typeof AuthenticatedKeywordsRoute
   '/monetization': typeof AuthenticatedMonetizationRoute
+  '/operations': typeof AuthenticatedOperationsRoute
   '/opportunities': typeof AuthenticatedOpportunitiesRoute
   '/publishing': typeof AuthenticatedPublishingRoute
   '/revenue': typeof AuthenticatedRevenueRoute
@@ -191,6 +199,7 @@ export interface FileRoutesById {
   '/_authenticated/internal-links': typeof AuthenticatedInternalLinksRoute
   '/_authenticated/keywords': typeof AuthenticatedKeywordsRoute
   '/_authenticated/monetization': typeof AuthenticatedMonetizationRoute
+  '/_authenticated/operations': typeof AuthenticatedOperationsRoute
   '/_authenticated/opportunities': typeof AuthenticatedOpportunitiesRoute
   '/_authenticated/publishing': typeof AuthenticatedPublishingRoute
   '/_authenticated/revenue': typeof AuthenticatedRevenueRoute
@@ -214,6 +223,7 @@ export interface FileRouteTypes {
     | '/internal-links'
     | '/keywords'
     | '/monetization'
+    | '/operations'
     | '/opportunities'
     | '/publishing'
     | '/revenue'
@@ -235,6 +245,7 @@ export interface FileRouteTypes {
     | '/internal-links'
     | '/keywords'
     | '/monetization'
+    | '/operations'
     | '/opportunities'
     | '/publishing'
     | '/revenue'
@@ -257,6 +268,7 @@ export interface FileRouteTypes {
     | '/_authenticated/internal-links'
     | '/_authenticated/keywords'
     | '/_authenticated/monetization'
+    | '/_authenticated/operations'
     | '/_authenticated/opportunities'
     | '/_authenticated/publishing'
     | '/_authenticated/revenue'
@@ -339,6 +351,13 @@ declare module '@tanstack/react-router' {
       path: '/opportunities'
       fullPath: '/opportunities'
       preLoaderRoute: typeof AuthenticatedOpportunitiesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/operations': {
+      id: '/_authenticated/operations'
+      path: '/operations'
+      fullPath: '/operations'
+      preLoaderRoute: typeof AuthenticatedOperationsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/monetization': {
@@ -429,6 +448,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedInternalLinksRoute: typeof AuthenticatedInternalLinksRoute
   AuthenticatedKeywordsRoute: typeof AuthenticatedKeywordsRoute
   AuthenticatedMonetizationRoute: typeof AuthenticatedMonetizationRoute
+  AuthenticatedOperationsRoute: typeof AuthenticatedOperationsRoute
   AuthenticatedOpportunitiesRoute: typeof AuthenticatedOpportunitiesRoute
   AuthenticatedPublishingRoute: typeof AuthenticatedPublishingRoute
   AuthenticatedRevenueRoute: typeof AuthenticatedRevenueRoute
@@ -448,6 +468,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedInternalLinksRoute: AuthenticatedInternalLinksRoute,
   AuthenticatedKeywordsRoute: AuthenticatedKeywordsRoute,
   AuthenticatedMonetizationRoute: AuthenticatedMonetizationRoute,
+  AuthenticatedOperationsRoute: AuthenticatedOperationsRoute,
   AuthenticatedOpportunitiesRoute: AuthenticatedOpportunitiesRoute,
   AuthenticatedPublishingRoute: AuthenticatedPublishingRoute,
   AuthenticatedRevenueRoute: AuthenticatedRevenueRoute,

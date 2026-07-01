@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { OpportunityQueue, PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
 
 export const Route = createFileRoute("/_authenticated/internal-links")({
   component: InternalLinksPage,
@@ -29,14 +30,24 @@ function InternalLinksPage() {
     <>
       <PageHeader
         title="Internal Links"
-        description="Semantic link recommendations from the sitewide graph. Computed from imported WordPress content — not generated."
+        description="Internal-link work queue. WordPress inventory enables exact source→target suggestions; GSC data still identifies high-impact pages that need link equity."
+        actions={<PipelineActions />}
       />
       <PageBody>
+        <PipelineCommandCenter focus="Import WordPress for exact source links; use GSC-backed internal-link-gap opportunities for prioritization." />
+        <OpportunityQueue
+          types={["internal_link_gap"]}
+          title="Internal-link priority queue"
+          description="High-value pages with weak internal-link support."
+          emptyTitle="No internal-link gap actions yet"
+          emptyDescription="Import WordPress inventory and run scoring to compute source-target recommendations."
+        />
         {q.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {q.data && q.data.length === 0 && (
           <EmptyState
             title="No internal link opportunities yet"
             description="Internal link suggestions are produced from page embeddings. Import WordPress inventory and run scoring on a site to populate this list."
+            action={<PipelineActions scope="compact" />}
           />
         )}
         <div className="space-y-2">

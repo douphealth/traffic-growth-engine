@@ -1,9 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageBody, PageHeader, EmptyState } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
 
 export const Route = createFileRoute("/_authenticated/publishing")({
   component: PublishingQueue,
@@ -35,14 +37,17 @@ function PublishingQueue() {
     <>
       <PageHeader
         title="Publishing Queue"
-        description="Drafts publish freely. Live updates require validated diffs, an approver, and a stored rollback snapshot. Every job is auditable."
+        description="Publish jobs only appear after validated, approved diffs. No silent live WordPress writes."
+        actions={<Button asChild><Link to="/validation">Open validation</Link></Button>}
       />
       <PageBody>
+        <PipelineCommandCenter focus="Publishing is intentionally gated: evidence → diff → validation → approval → rollback snapshot → write." />
         {q.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {q.data && q.data.length === 0 ? (
           <EmptyState
             title="No publish jobs yet"
             description="Approve a validated diff to queue a publish job. Every live update stores a rollback snapshot before writing."
+            action={<PipelineActions scope="compact" />}
           />
         ) : (
           <Card>

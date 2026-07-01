@@ -85,9 +85,15 @@ export const getPipelineHealth = createServerFn({ method: "GET" })
       .order("created_at", { ascending: true });
     if (sitesError) throw new Error(sitesError.message);
 
-    const { data: mappings } = await supabaseAdmin
-      .from("site_gsc_connections")
-      .select("site_id, gsc_properties:gsc_property_id(site_url, permission_level)");
+    const siteRows = sites ?? [];
+    const siteIds = siteRows.map((site) => site.id);
+
+    const { data: mappings } = siteIds.length
+      ? await supabaseAdmin
+          .from("site_gsc_connections")
+          .select("site_id, gsc_properties:gsc_property_id(site_url, permission_level)")
+          .in("site_id", siteIds)
+      : { data: [] };
 
     const propertyBySite = new Map<string, Array<{ site_url: string | null; permission_level: string | null }>>();
     for (const m of mappings ?? []) {
@@ -104,24 +110,57 @@ export const getPipelineHealth = createServerFn({ method: "GET" })
       ]);
     }
 
-    const metrics: SiteMetric[] = [];
-    for (const site of sites ?? []) {
-      const [pages, gscPages, wpPages, opps, gscRows, gscUrlsRows, gscDateRows] = await Promise.all([
-        supabaseAdmin.from("pages").select("id", { count: "exact", head: true }).eq("site_id", site.id),
-        supabaseAdmin.from("pages").select("id", { count: "exact", head: true }).eq("site_id", site.id).eq("post_type", "gsc_url"),
-        supabaseAdmin.from("pages").select("id", { count: "exact", head: true }).eq("site_id", site.id).not("wp_post_id", "is", null),
-        supabaseAdmin.from("opportunities").select("id", { count: "exact", head: true }).eq("site_id", site.id).eq("status", "open"),
-        supabaseAdmin.from("gsc_page_query_daily").select("id", { count: "exact", head: true }).eq("site_id", site.id),
-        supabaseAdmin.from("gsc_page_query_daily").select("url").eq("site_id", site.id).limit(50_000),
-        supabaseAdmin.from("gsc_page_query_daily").select("date").eq("site_id", site.id).order("date", { ascending: false }).limit(1),
-      ]);
+    const [pageRows, opportunityRows, gscRows] = await Promise.all([
+      fetchAllRows<{ site_id: string; post_type: string | null; wp_post_id: number | null }>(async (from, to) => {
+        return supabaseAdmin
+          .from("pages")
+          .select("site_id, post_type, wp_post_id")
+          .in("site_id", siteIds)
+          .range(from, to);
+      }, siteIds.length),
+      fetchAllRows<{ site_id: string; status: string | null }>(async (from, to) => {
+        return supabaseAdmin
+          .from("opportunities")
+          .select("site_id, status")
+          .in("site_id", siteIds)
+          .eq("status", "open")
+          .range(from, to);
+      }, siteIds.length),
+      fetchAllRows<{ site_id: string; url: string | null; date: string | null }>(async (from, to) => {
+        return supabaseAdmin
+          .from("gsc_page_query_daily")
+          .select("site_id, url, date")
+          .in("site_id", siteIds)
+          .range(from, to);
+      }, siteIds.length),
+    ]);
 
-      const { data: oldest } = await supabaseAdmin
-        .from("gsc_page_query_daily")
-        .select("date")
-        .eq("site_id", site.id)
-        .order("date", { ascending: true })
-        .limit(1);
+    const pageStats = new Map<string, { pages: number; gsc_pages: number; wp_pages: number }>();
+    for (const row of pageRows) {
+      const current = pageStats.get(row.site_id) ?? { pages: 0, gsc_pages: 0, wp_pages: 0 };
+      current.pages += 1;
+      if (row.post_type === "gsc_url") current.gsc_pages += 1;
+      if (row.wp_post_id != null) current.wp_pages += 1;
+      pageStats.set(row.site_id, current);
+    }
+
+    const opportunityStats = new Map<string, number>();
+    for (const row of opportunityRows) opportunityStats.set(row.site_id, (opportunityStats.get(row.site_id) ?? 0) + 1);
+
+    const gscStats = new Map<string, { rows: number; urls: Set<string>; first: string | null; last: string | null }>();
+    for (const row of gscRows) {
+      const current = gscStats.get(row.site_id) ?? { rows: 0, urls: new Set<string>(), first: null, last: null };
+      current.rows += 1;
+      if (row.url) current.urls.add(row.url);
+      if (row.date && (!current.first || row.date < current.first)) current.first = row.date;
+      if (row.date && (!current.last || row.date > current.last)) current.last = row.date;
+      gscStats.set(row.site_id, current);
+    }
+
+    const metrics: SiteMetric[] = [];
+    for (const site of siteRows) {
+      const pages = pageStats.get(site.id) ?? { pages: 0, gsc_pages: 0, wp_pages: 0 };
+      const gsc = gscStats.get(site.id) ?? { rows: 0, urls: new Set<string>(), first: null, last: null };
 
       const props = propertyBySite.get(site.id) ?? [];
       metrics.push({
@@ -129,14 +168,14 @@ export const getPipelineHealth = createServerFn({ method: "GET" })
         name: site.name,
         base_url: site.base_url,
         gsc_property: site.gsc_property,
-        pages: pages.count ?? 0,
-        gsc_pages: gscPages.count ?? 0,
-        wp_pages: wpPages.count ?? 0,
-        gsc_rows: gscRows.count ?? 0,
-        gsc_urls: new Set((gscUrlsRows.data ?? []).map((r: { url: string }) => r.url)).size,
-        opportunities: opps.count ?? 0,
-        last_gsc_date: gscDateRows.data?.[0]?.date ?? null,
-        first_gsc_date: oldest?.[0]?.date ?? null,
+        pages: pages.pages,
+        gsc_pages: pages.gsc_pages,
+        wp_pages: pages.wp_pages,
+        gsc_rows: gsc.rows,
+        gsc_urls: gsc.urls.size,
+        opportunities: opportunityStats.get(site.id) ?? 0,
+        last_gsc_date: gsc.last,
+        first_gsc_date: gsc.first,
         linked_properties: props.length ? props.map((p) => p.site_url).filter(Boolean) as string[] : (site.gsc_property ? [site.gsc_property] : []),
         permission_levels: props.map((p) => p.permission_level).filter(Boolean) as string[],
       });
@@ -227,4 +266,23 @@ function sum(rows: SiteMetric[], key: keyof Pick<SiteMetric, "pages" | "gsc_page
 
 function emptyTotals() {
   return { sites: 0, property_variants: 0, pages: 0, gsc_urls: 0, gsc_rows: 0, opportunities: 0, average_quality: 0 };
+}
+
+async function fetchAllRows<T>(
+  makeRequest: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  enabled: boolean | number,
+): Promise<T[]> {
+  if (!enabled) return [];
+  const out: T[] = [];
+  // The hosted PostgREST API caps responses at 1,000 rows even when a larger range is requested.
+  // Use a 1,000-row page size so pagination does not stop early and under-report GSC evidence.
+  const size = 1_000;
+  for (let from = 0; ; from += size) {
+    const { data, error } = await makeRequest(from, from + size - 1);
+    if (error) throw new Error(error.message);
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < size) break;
+  }
+  return out;
 }

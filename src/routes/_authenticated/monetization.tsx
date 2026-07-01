@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { OpportunityQueue, PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
 
 export const Route = createFileRoute("/_authenticated/monetization")({
   component: MonetizationPage,
@@ -28,14 +29,24 @@ function MonetizationPage() {
     <>
       <PageHeader
         title="Monetization"
-        description="Safe affiliate fixes only: disclosures, tracked outbound links, comparison-table CTAs. Never invents revenue, reviews, or merchant claims."
+        description="Monetization actions from real traffic and page evidence. No invented revenue, reviews, or merchant claims."
+        actions={<PipelineActions />}
       />
       <PageBody>
+        <PipelineCommandCenter focus="Find pages with real clicks first, then prioritize safe monetization changes." />
+        <OpportunityQueue
+          types={["monetization_leak"]}
+          title="Revenue action queue"
+          description="Pages receiving organic clicks where monetization instrumentation or affiliate coverage is missing."
+          emptyTitle="No monetization actions yet"
+          emptyDescription="Import GSC data, import WordPress inventory for affiliate detection, then run scoring."
+        />
         {q.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {q.data && q.data.length === 0 && (
           <EmptyState
             title="No monetization opportunities yet"
             description="These are detected when opportunity scoring runs against pages with affiliate links. Run scoring on a site to populate this list."
+            action={<PipelineActions scope="compact" />}
           />
         )}
         {q.data && q.data.length > 0 && (

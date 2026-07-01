@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { ShieldCheck, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { OpportunityQueue, PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
 
 export const Route = createFileRoute("/_authenticated/validation")({
   component: ValidationPage,
@@ -28,14 +29,24 @@ function ValidationPage() {
     <>
       <PageHeader
         title="Validation & Diff Review"
-        description="Every proposed change is checked for HTML safety, preserved assets, schema/content match, and monetization integrity. If a critical check fails, publishing is blocked."
+        description="Human-in-the-loop safety layer. Until diffs exist, use the evidence queue to decide which change should enter validation first."
+        actions={<PipelineActions />}
       />
       <PageBody>
+        <PipelineCommandCenter focus="Validation should only review changes that came from real GSC evidence and can be rolled back." />
+        <OpportunityQueue
+          title="Ready to turn into validation work"
+          description="Open opportunities with evidence, action, and measurement method. Generate diffs from these before publishing."
+          emptyTitle="No validation candidates yet"
+          emptyDescription="Run the pipeline to generate evidence-backed actions, then promote one into a diff for validation."
+          limit={8}
+        />
         {q.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {q.data && q.data.length === 0 && (
           <EmptyState
             title="No validation runs yet"
             description="A validation run is recorded automatically each time a diff is generated. Generate diffs from briefs to populate this view."
+            action={<PipelineActions scope="compact" />}
           />
         )}
         {q.data?.map((d: any) => (

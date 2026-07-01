@@ -30,6 +30,7 @@ type SiteRow = {
   sitemap_url: string | null;
   gsc_property: string | null;
   ga4_property_id: string | null;
+  wp_username: string | null;
   created_at: string;
 };
 
@@ -40,7 +41,7 @@ function SitesPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sites")
-        .select("id, name, base_url, status, sitemap_url, gsc_property, ga4_property_id, created_at")
+        .select("id, name, base_url, status, sitemap_url, gsc_property, ga4_property_id, wp_username, created_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as SiteRow[];
@@ -158,6 +159,7 @@ function SiteCard({ site, health, onChanged }: { site: SiteRow; health?: SitePip
 
   const [busy, setBusy] = useState<string | null>(null);
   const hasGsc = Boolean(site.gsc_property || health?.property_variants.length);
+  const hasWp = Boolean(site.wp_username);
   const gscRows = health?.gsc_rows ?? stats.data?.gscRows ?? 0;
   const pagesCount = health?.pages ?? stats.data?.pagesCount ?? 0;
   const oppsOpen = health?.opportunities ?? stats.data?.oppsOpen ?? 0;
@@ -264,13 +266,14 @@ function SiteCard({ site, health, onChanged }: { site: SiteRow; health?: SitePip
           </div>
         )}
         <div className="flex flex-wrap gap-2 border-t border-border pt-3">
-          <Button variant="outline" size="sm" disabled={testConn.isPending} onClick={() => testConn.mutate()}>
+          <Button variant="outline" size="sm" disabled={testConn.isPending || !hasWp} title={!hasWp ? "Add WordPress credentials before testing WordPress." : undefined} onClick={() => testConn.mutate()}>
             <RefreshCw className={`mr-1 h-3 w-3 ${testConn.isPending ? "animate-spin" : ""}`} /> Test WP
           </Button>
           <Button
             variant="outline"
             size="sm"
-            disabled={busy !== null}
+            disabled={busy !== null || !hasWp}
+            title={!hasWp ? "Add WordPress credentials before importing WordPress inventory." : undefined}
             onClick={run(
               "import",
               () => importWordpressInventory({ data: { site_id: site.id } }),
