@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { OpportunityQueue, PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
 import { toast } from "sonner";
+import { useSiteScope } from "@/hooks/use-site-scope";
 
 export const Route = createFileRoute("/_authenticated/internal-links")({
   component: InternalLinksPage,
