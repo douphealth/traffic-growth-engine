@@ -45,10 +45,11 @@ export function SiteScopeProvider({ children }: { children: ReactNode }) {
     return window.localStorage.getItem(STORAGE_KEY);
   });
 
-  // Auto-select the only site if just one exists and none stored.
+  // Auto-focus the first site so users start with a precise, single-site view
+  // instead of a scattered "All sites" aggregate. They can switch to All manually.
   useEffect(() => {
     if (!sitesQ.data || siteId) return;
-    if (sitesQ.data.length === 1) setSiteIdState(sitesQ.data[0].id);
+    if (sitesQ.data.length >= 1) setSiteIdState(sitesQ.data[0].id);
   }, [sitesQ.data, siteId]);
 
   // Drop stale selection if the site disappeared.
@@ -95,21 +96,26 @@ export function SiteScopeSelector({ className }: { className?: string }) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
-          variant="outline"
+          variant={siteId ? "default" : "outline"}
           size="sm"
-          className={cn("h-9 min-w-[220px] justify-between gap-2", className)}
+          className={cn(
+            "h-9 min-w-[260px] justify-between gap-2 border-primary/40",
+            siteId ? "" : "ring-2 ring-primary/40 animate-pulse",
+            className,
+          )}
           disabled={loading}
         >
           <span className="flex items-center gap-2 min-w-0">
-            <Globe className="h-3.5 w-3.5 shrink-0 text-primary" />
-            <span className="truncate text-left">
-              {currentSite ? currentSite.name : "All sites"}
+            <Globe className="h-3.5 w-3.5 shrink-0" />
+            <span className="flex flex-col items-start leading-tight min-w-0">
+              <span className="text-[9px] uppercase tracking-wider opacity-70">Focused site</span>
+              <span className="truncate text-left text-xs font-semibold max-w-[200px]">
+                {currentSite ? currentSite.name : `All sites — pick one to focus`}
+              </span>
             </span>
           </span>
           <div className="flex items-center gap-1.5">
-            {!siteId && sites.length > 0 && (
-              <Badge variant="secondary" className="text-[10px]">{sites.length}</Badge>
-            )}
+            <Badge variant="secondary" className="text-[10px]">{sites.length}</Badge>
             <ChevronsUpDown className="h-3.5 w-3.5 opacity-60" />
           </div>
         </Button>
