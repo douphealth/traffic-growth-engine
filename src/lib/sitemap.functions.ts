@@ -65,8 +65,9 @@ export const crawlSitemap = createServerFn({ method: "POST" })
       await supabaseAdmin.from("sitemap_urls").upsert(batch as never, { onConflict: "site_id,url" });
     }
 
-    // Reset in_sitemap then mark matched
-    await supabaseAdmin.from("pages").update({ in_sitemap: false } as never).eq("site_id", site.id);
+    // Only update page flags after a successful full sitemap fetch. Do not clear
+    // existing flags before fetch/upsert succeeds, or a partial timeout can create
+    // false indexation-risk findings across the entire site.
     const sitemapSet = new Set(urls.map((u) => u.loc));
     const { data: allPages } = await supabaseAdmin
       .from("pages")
@@ -82,6 +83,14 @@ export const crawlSitemap = createServerFn({ method: "POST" })
     }
     const wp_missing = (allPages ?? []).filter((p) => !sitemapSet.has(p.url)).length;
     const sitemap_missing_from_wp = urls.filter((u) => !pageUrls.has(u.loc)).length;
+
+    const missingIds = (allPages ?? []).filter((p) => !sitemapSet.has(p.url)).map((p) => p.id);
+    for (let i = 0; i < missingIds.length; i += 500) {
+      await supabaseAdmin
+        .from("pages")
+        .update({ in_sitemap: false } as never)
+        .in("id", missingIds.slice(i, i + 500));
+    }
 
     await supabase.from("audit_logs").insert({
       org_id: site.org_id,

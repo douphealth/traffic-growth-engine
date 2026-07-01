@@ -30,7 +30,7 @@ export const importWordpressInventory = createServerFn({ method: "POST" })
     for (const postType of ["posts", "pages"] as const) {
       let page = 1;
       let totalPages = 1;
-      while (page <= totalPages && page <= 50 /* safety cap */) {
+      while (page <= totalPages) {
         const url =
           `${site.base_url}/wp-json/wp/v2/${postType}` +
           `?per_page=100&page=${page}&context=edit&status=publish,draft,private,future`;
@@ -95,19 +95,29 @@ export const importWordpressInventory = createServerFn({ method: "POST" })
               continue;
             }
 
-            await supabaseAdmin.from("page_snapshots").insert({
-              site_id: site.id,
-              page_id: pageRow!.id,
-              raw_html: rawHtml || null,
-              rendered_html: renderedHtml || null,
-              headings: extracted.headings as never,
-              schema_jsonld: extracted.schema_jsonld as never,
-              internal_link_count: extracted.internal_links.length,
-              outbound_link_count: extracted.outbound_links.length,
-              affiliate_link_count: extracted.affiliate_links.length,
-              image_count: extracted.images.length,
-              hash,
-            });
+            const { data: latestSnapshot } = await supabaseAdmin
+              .from("page_snapshots")
+              .select("hash")
+              .eq("page_id", pageRow!.id)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (latestSnapshot?.hash !== hash) {
+              await supabaseAdmin.from("page_snapshots").insert({
+                site_id: site.id,
+                page_id: pageRow!.id,
+                raw_html: rawHtml || null,
+                rendered_html: renderedHtml || null,
+                headings: extracted.headings as never,
+                schema_jsonld: extracted.schema_jsonld as never,
+                internal_link_count: extracted.internal_links.length,
+                outbound_link_count: extracted.outbound_links.length,
+                affiliate_link_count: extracted.affiliate_links.length,
+                image_count: extracted.images.length,
+                hash,
+              });
+            }
             imported++;
           } catch (e) {
             errors.push(e instanceof Error ? e.message : String(e));
