@@ -14,8 +14,8 @@ type SiteMetric = {
   opportunities: number;
   last_gsc_date: string | null;
   first_gsc_date: string | null;
-  linked_property: string | null;
-  permission_level: string | null;
+  linked_properties: string[];
+  permission_levels: string[];
 };
 
 export type SitePipelineHealth = {
@@ -89,15 +89,19 @@ export const getPipelineHealth = createServerFn({ method: "GET" })
       .from("site_gsc_connections")
       .select("site_id, gsc_properties:gsc_property_id(site_url, permission_level)");
 
-    const propertyBySite = new Map<string, { site_url: string | null; permission_level: string | null }>();
+    const propertyBySite = new Map<string, Array<{ site_url: string | null; permission_level: string | null }>>();
     for (const m of mappings ?? []) {
       const prop = Array.isArray((m as any).gsc_properties)
         ? (m as any).gsc_properties[0]
         : (m as any).gsc_properties;
-      propertyBySite.set((m as any).site_id, {
+      const siteId = (m as any).site_id;
+      propertyBySite.set(siteId, [
+        ...(propertyBySite.get(siteId) ?? []),
+        {
         site_url: prop?.site_url ?? null,
         permission_level: prop?.permission_level ?? null,
-      });
+        },
+      ]);
     }
 
     const metrics: SiteMetric[] = [];
@@ -119,7 +123,7 @@ export const getPipelineHealth = createServerFn({ method: "GET" })
         .order("date", { ascending: true })
         .limit(1);
 
-      const prop = propertyBySite.get(site.id);
+      const props = propertyBySite.get(site.id) ?? [];
       metrics.push({
         site_id: site.id,
         name: site.name,
@@ -133,8 +137,8 @@ export const getPipelineHealth = createServerFn({ method: "GET" })
         opportunities: opps.count ?? 0,
         last_gsc_date: gscDateRows.data?.[0]?.date ?? null,
         first_gsc_date: oldest?.[0]?.date ?? null,
-        linked_property: prop?.site_url ?? site.gsc_property ?? null,
-        permission_level: prop?.permission_level ?? null,
+        linked_properties: props.length ? props.map((p) => p.site_url).filter(Boolean) as string[] : (site.gsc_property ? [site.gsc_property] : []),
+        permission_levels: props.map((p) => p.permission_level).filter(Boolean) as string[],
       });
     }
 
@@ -184,8 +188,8 @@ export const getPipelineHealth = createServerFn({ method: "GET" })
         name: canonical.name,
         base_url: canonical.base_url,
         site_ids: rows.map((r) => r.site_id),
-        property_variants: Array.from(new Set(rows.map((r) => r.linked_property).filter(Boolean) as string[])),
-        permission_levels: Array.from(new Set(rows.map((r) => r.permission_level).filter(Boolean) as string[])),
+        property_variants: Array.from(new Set(rows.flatMap((r) => r.linked_properties))),
+        permission_levels: Array.from(new Set(rows.flatMap((r) => r.permission_levels))),
         pages: pageCount,
         gsc_pages: sum(rows, "gsc_pages"),
         wp_pages: sum(rows, "wp_pages"),
