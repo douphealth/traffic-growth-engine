@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { GitCompare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { OpportunityQueue, PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
 
 export const Route = createFileRoute("/_authenticated/content")({
   component: ContentPipeline,
@@ -41,9 +42,20 @@ function ContentPipeline() {
     <>
       <PageHeader
         title="Content Pipeline"
-        description="Briefs are generated from real opportunity evidence — never from a generic article generator. Improvements are surgical: preserve images, tables, buttons, shortcodes, affiliate boxes."
+        description="A practical work queue for content updates from real GSC opportunity evidence. AI writing is not enabled; this shows what to update and why."
+        actions={<PipelineActions />}
       />
       <PageBody>
+        <PipelineCommandCenter focus="Import GSC, sync pages, and score opportunities before drafting any content changes." />
+
+        <OpportunityQueue
+          types={["ctr_leak", "striking_distance", "decayed_page", "ai_answer_gap"]}
+          title="Content update queue"
+          description="Prioritized URLs and exact queries that justify content or snippet updates."
+          emptyTitle="No content actions yet"
+          emptyDescription="Run the full GSC pipeline to create evidence-backed content actions from real queries and URLs."
+        />
+
         <section className="space-y-3">
           <div>
             <h2 className="text-sm font-semibold text-foreground">Content briefs</h2>

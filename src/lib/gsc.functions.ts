@@ -131,8 +131,8 @@ function validateGscRow(row: GscRow): { ok: true; row: ValidGscRow } | { ok: fal
 }
 
 const WINDOWS: { label: string; offsetEnd: number; days: number }[] = [
-  { label: "last_28", offsetEnd: 3, days: 28 },
-  { label: "prev_28", offsetEnd: 31, days: 28 },
+  // Import non-overlapping 90-day evidence windows. The UI and scoring can derive
+  // 28-day slices from this data without hammering GSC with duplicate requests.
   { label: "last_90", offsetEnd: 3, days: 90 },
   { label: "prev_90", offsetEnd: 93, days: 90 },
 ];
@@ -315,7 +315,6 @@ export const importGscData = createServerFn({ method: "POST" })
           totalRows += upserts.length;
           if (rows.length < rowLimit) break;
           startRow += rowLimit;
-          if (startRow > 250000) break;
         }
       }
     }

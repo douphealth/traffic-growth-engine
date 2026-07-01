@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { OpportunityQueue, PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
 
 export const Route = createFileRoute("/_authenticated/experiments")({
   component: ExperimentsPage,
@@ -27,14 +28,24 @@ function ExperimentsPage() {
     <>
       <PageHeader
         title="Experiments"
-        description="Every approved change becomes an experiment with a baseline. Outcomes are classified as win, loss, or neutral at 14, 28, 60, and 90 days."
+        description="Experiment candidates and launched tests. Every future published change must keep a measurable GSC baseline."
+        actions={<PipelineActions />}
       />
       <PageBody>
+        <PipelineCommandCenter focus="Use the highest-priority opportunities as experiment candidates before any live WordPress update." />
+        <OpportunityQueue
+          title="Experiment candidates"
+          description="Highest-impact open actions ready to become controlled tests once a diff is validated and approved."
+          emptyTitle="No experiment candidates yet"
+          emptyDescription="Run GSC import and opportunity scoring to generate measurable experiment candidates."
+          limit={10}
+        />
         {q.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {q.data && q.data.length === 0 && (
           <EmptyState
             title="No experiments yet"
             description="An experiment is recorded automatically when a diff is approved and published. Approve diffs in Validation to start tracking impact."
+            action={<PipelineActions scope="compact" />}
           />
         )}
         <div className="grid gap-3 md:grid-cols-2">

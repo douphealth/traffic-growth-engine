@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { getPipelineHealth } from "@/lib/quality.functions";
+import { PipelineActions } from "@/components/ops-workspace";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: DashboardPage,
@@ -82,6 +83,7 @@ function DashboardPage() {
         description="Evidence-backed pipeline health from live Search Console, page inventory, and opportunity scoring data. No demo metrics."
         actions={
           <div className="flex gap-2">
+            <PipelineActions scope="compact" />
             <Button variant="outline" asChild>
               <Link to="/sites/connect"><Plus className="mr-1.5 h-3.5 w-3.5" /> Connect site</Link>
             </Button>

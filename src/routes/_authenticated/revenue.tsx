@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PageBody, PageHeader, EmptyState } from "@/components/page-header";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { OpportunityQueue, PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
 
 export const Route = createFileRoute("/_authenticated/revenue")({
   component: RevenuePage,
@@ -39,18 +40,32 @@ function RevenuePage() {
     <>
       <PageHeader
         title="Revenue"
-        description="Per-URL revenue requires GA4 affiliate_click events + merchant attribution. Until GA4 is wired, this view shows real GSC clicks per page — never invented dollar values."
+        description="Traffic-backed revenue prioritization. Until GA4/merchant attribution is wired, this page uses real organic clicks and never invents dollars."
+        actions={<PipelineActions />}
       />
       <PageBody>
+        <PipelineCommandCenter focus="Prioritize monetization only on pages with real traffic and clear measurement paths." />
+        <OpportunityQueue
+          types={["monetization_leak"]}
+          title="Revenue opportunity queue"
+          description="Organic-click pages that should be reviewed for safe monetization or tracking fixes."
+          emptyTitle="No revenue actions yet"
+          emptyDescription="Import GSC and WordPress inventory, then run scoring to identify traffic pages without monetization coverage."
+        />
         {q.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {q.data && q.data.length === 0 && (
           <EmptyState
             title="No traffic data yet"
             description="Import Google Search Console data on a connected site to populate this view."
+            action={<PipelineActions scope="compact" />}
           />
         )}
         {q.data && q.data.length > 0 && (
           <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Top organic traffic pages</CardTitle>
+              <CardDescription>Real GSC clicks by URL for the last 28 days.</CardDescription>
+            </CardHeader>
             <CardContent className="p-0">
               <table className="w-full text-sm">
                 <thead className="bg-muted/30 text-xs text-muted-foreground">

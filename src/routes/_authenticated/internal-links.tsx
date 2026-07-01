@@ -2,15 +2,19 @@ import { createFileRoute } from "@tanstack/react-router";
 import { PageBody, PageHeader, EmptyState } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { OpportunityQueue, PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/internal-links")({
   component: InternalLinksPage,
 });
 
 function InternalLinksPage() {
+  const qc = useQueryClient();
   const q = useQuery({
     queryKey: ["link-opportunities"],
     queryFn: async () => {
@@ -25,18 +29,42 @@ function InternalLinksPage() {
     },
   });
 
+  const setStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: "queued" | "dismissed" }) => {
+      const { error } = await supabase.from("link_opportunities").update({ status }).eq("id", id);
+      if (error) throw error;
+      return status;
+    },
+    onSuccess: (status) => {
+      toast.success(status === "queued" ? "Internal link queued for validation" : "Internal link dismissed");
+      qc.invalidateQueries({ queryKey: ["link-opportunities"] });
+      qc.invalidateQueries({ queryKey: ["pipeline-health"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   return (
     <>
       <PageHeader
         title="Internal Links"
-        description="Semantic link recommendations from the sitewide graph. Computed from imported WordPress content — not generated."
+        description="Internal-link work queue. WordPress inventory enables exact source→target suggestions; GSC data still identifies high-impact pages that need link equity."
+        actions={<PipelineActions />}
       />
       <PageBody>
+        <PipelineCommandCenter focus="Import WordPress for exact source links; use GSC-backed internal-link-gap opportunities for prioritization." />
+        <OpportunityQueue
+          types={["internal_link_gap"]}
+          title="Internal-link priority queue"
+          description="High-value pages with weak internal-link support."
+          emptyTitle="No internal-link gap actions yet"
+          emptyDescription="Import WordPress inventory and run scoring to compute source-target recommendations."
+        />
         {q.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {q.data && q.data.length === 0 && (
           <EmptyState
             title="No internal link opportunities yet"
             description="Internal link suggestions are produced from page embeddings. Import WordPress inventory and run scoring on a site to populate this list."
+            action={<PipelineActions scope="compact" />}
           />
         )}
         <div className="space-y-2">
@@ -57,6 +85,17 @@ function InternalLinksPage() {
                   <span className="text-xs text-muted-foreground tabular-nums">
                     sim {Number(l.similarity ?? 0).toFixed(2)}
                   </span>
+                  {l.target_url && (
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={l.target_url} target="_blank" rel="noreferrer">Open target</a>
+                    </Button>
+                  )}
+                  <Button size="sm" onClick={() => setStatus.mutate({ id: l.id, status: "queued" })} disabled={setStatus.isPending}>
+                    Queue link
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setStatus.mutate({ id: l.id, status: "dismissed" })} disabled={setStatus.isPending}>
+                    Ignore
+                  </Button>
                 </div>
               </CardContent>
             </Card>

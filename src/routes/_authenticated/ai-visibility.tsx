@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { OpportunityQueue, PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
 
 export const Route = createFileRoute("/_authenticated/ai-visibility")({
   component: AIVisibilityPage,
@@ -34,9 +35,19 @@ function AIVisibilityPage() {
     <>
       <PageHeader
         title="AI Visibility"
-        description="Monitor whether AI assistants cite or recommend your brand. Monitoring only — no claims of improvement without measurement."
+        description="AI visibility polling is not enabled yet. This page is still useful: it shows AI-answer readiness actions derived from real GSC/page evidence."
+        actions={<PipelineActions />}
       />
       <PageBody>
+        <PipelineCommandCenter focus="Use Search Console evidence to prepare pages for answer engines before enabling AI polling." />
+        <OpportunityQueue
+          types={["ai_answer_gap"]}
+          title="AI-answer readiness queue"
+          description="Pages with real search demand that need concise answers, FAQs, and stronger extractable structure."
+          emptyTitle="No AI-readiness actions yet"
+          emptyDescription="Run scoring after GSC import. AI polling remains disabled, but readiness gaps can still be identified from imported pages."
+        />
+
         <div className="grid gap-3 md:grid-cols-3">
           <Stat title="Tracked prompts" value={prompts.length.toString()} />
           <Stat title="Brand citation rate" value={totalRuns ? `${Math.round((brandHits / totalRuns) * 100)}%` : "—"} sub={`${brandHits} / ${totalRuns} runs`} />
@@ -47,6 +58,7 @@ function AIVisibilityPage() {
           <EmptyState
             title="No tracked prompts yet"
             description="AI visibility polling is not enabled in this build. Tracked prompts and polling runs will appear here once configured."
+            action={<PipelineActions scope="compact" />}
           />
         ) : (
           <div className="space-y-2">

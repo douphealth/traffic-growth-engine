@@ -1,28 +1,43 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ShieldCheck } from "lucide-react";
-import { useDemoMode } from "@/hooks/use-demo-mode";
+import { Badge } from "@/components/ui/badge";
+import { ShieldCheck, Search, Globe, Target, Activity } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   component: SettingsPage,
 });
 
 function SettingsPage() {
-  const [demo, setDemo] = useDemoMode();
+  const auditQ = useQuery({
+    queryKey: ["settings-audit-log"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("audit_logs")
+        .select("id, action, created_at, site:sites(name)")
+        .order("created_at", { ascending: false })
+        .limit(8);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   return (
     <>
       <PageHeader
         title="Settings"
-        description="Per-site safety rules, AI provider routing, and audit log access."
+        description="Operational controls and safety posture. No demo mode, no fake credential forms, no nonfunctional save button."
         badge={null}
+        actions={<PipelineActions />}
       />
       <PageBody>
+        <PipelineCommandCenter focus="Use these controls to keep imports, scoring, validation, and publishing auditable." />
+
         <Alert>
           <ShieldCheck className="h-4 w-4" />
           <AlertTitle>Security defaults</AlertTitle>
@@ -32,94 +47,79 @@ function SettingsPage() {
           </AlertDescription>
         </Alert>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Demo mode</CardTitle>
-            <CardDescription>
-              Show mock fixtures on screens that don't have real data yet (Content Pipeline, Validation, Publishing, etc.).
-              Dashboard, Site Inventory, and Opportunity Board always use real data when present.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between rounded-md border border-border p-3">
-              <div>
-                <div className="text-sm font-medium">Demo mode is {demo ? "ON" : "OFF"}</div>
-                <p className="text-xs text-muted-foreground">A warning banner appears globally while ON.</p>
-              </div>
-              <Switch checked={demo} onCheckedChange={setDemo} />
-            </div>
-          </CardContent>
-        </Card>
-
-
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Publish safety rules</CardTitle>
-              <CardDescription>Block destructive changes by default.</CardDescription>
+              <CardTitle className="text-base">Pipeline controls</CardTitle>
+              <CardDescription>Direct links to the working configuration screens.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <Toggle defaultChecked label="Require approval for every live update" />
-              <Toggle defaultChecked label="Store rollback snapshot before any write" />
-              <Toggle defaultChecked label="Block publish if affiliate links would be removed" />
-              <Toggle defaultChecked label="Block publish if images / tables / buttons would be lost" />
-              <Toggle defaultChecked label="Block schema without visible content evidence" />
-              <Toggle defaultChecked label="Block unsupported health / financial claims" />
+            <CardContent className="grid gap-2 sm:grid-cols-2">
+              <ControlLink to="/gsc/connect" icon={<Search className="h-4 w-4" />} label="GSC connector" detail="OAuth, properties, imports" />
+              <ControlLink to="/sites" icon={<Globe className="h-4 w-4" />} label="Site inventory" detail="Pipelines and WordPress" />
+              <ControlLink to="/opportunities" icon={<Target className="h-4 w-4" />} label="Opportunity scoring" detail="Top 20 actions per site" />
+              <ControlLink to="/validation" icon={<ShieldCheck className="h-4 w-4" />} label="Validation" detail="Approval and safety checks" />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">AI provider</CardTitle>
-              <CardDescription>Default routing for briefs, improvements, and AI-visibility runs.</CardDescription>
+              <CardTitle className="text-base">Enforced safety rules</CardTitle>
+              <CardDescription>These rules are product constraints, not decorative toggles.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-1.5">
-                <Label>Default model</Label>
-                <Input defaultValue="google/gemini-3-flash-preview" />
-                <p className="text-[11px] text-muted-foreground">Lovable AI Gateway routes to the provider — no API key needed.</p>
-              </div>
-              <Toggle defaultChecked label="Reject AI outputs that fail schema validation" />
-              <Toggle defaultChecked label="Log token usage and latency per request" />
+            <CardContent className="space-y-2">
+              <Rule label="Live WordPress updates require human approval" />
+              <Rule label="Rollback snapshots are required before writes" />
+              <Rule label="Schema must match visible content" />
+              <Rule label="Affiliate links, images, tables, and buttons must be preserved" />
+              <Rule label="Health/finance claims require validation before publishing" />
             </CardContent>
           </Card>
 
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle className="text-base">External credentials (placeholders)</CardTitle>
-              <CardDescription>Add via the secure secret store later — fields shown are non-functional in Phase 1.</CardDescription>
+              <CardTitle className="text-base">Recent audit trail</CardTitle>
+              <CardDescription>Imports, page sync, scoring, validation, and publish actions are recorded here.</CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2">
-              <Field id="dfs" label="DataForSEO login" placeholder="not configured" />
-              <Field id="dfsk" label="DataForSEO password" placeholder="not configured" type="password" />
-              <Field id="psi" label="PageSpeed Insights key" placeholder="not configured" />
-              <Field id="indexnow" label="IndexNow key" placeholder="not configured" />
+            <CardContent className="space-y-2">
+              {auditQ.isLoading && <p className="text-sm text-muted-foreground">Loading audit log…</p>}
+              {auditQ.data?.length === 0 && <p className="text-sm text-muted-foreground">No audit events yet.</p>}
+              {auditQ.data?.map((event: any) => (
+                <div key={event.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/20 p-3">
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-3.5 w-3.5 text-primary" />
+                    <Badge variant="outline" className="text-[10px]">{event.action}</Badge>
+                    <span className="text-xs text-muted-foreground">{event.site?.name ?? "workspace"}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{new Date(event.created_at).toLocaleString()}</span>
+                </div>
+              ))}
             </CardContent>
           </Card>
-
-          <div className="lg:col-span-2 flex justify-end">
-            <Button>Save settings</Button>
-          </div>
         </div>
       </PageBody>
     </>
   );
 }
 
-function Toggle({ label, defaultChecked }: { label: string; defaultChecked?: boolean }) {
+function ControlLink({ to, icon, label, detail }: { to: "/gsc/connect" | "/sites" | "/opportunities" | "/validation"; icon: React.ReactNode; label: string; detail: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-card/40 px-3 py-2">
-      <span className="text-sm">{label}</span>
-      <Switch defaultChecked={defaultChecked} />
-    </div>
+    <Button variant="outline" asChild className="h-auto justify-start p-3">
+      <Link to={to} className="flex items-start gap-2">
+        <span className="mt-0.5 text-primary">{icon}</span>
+        <span className="text-left">
+          <span className="block text-sm font-medium">{label}</span>
+          <span className="block text-xs text-muted-foreground">{detail}</span>
+        </span>
+      </Link>
+    </Button>
   );
 }
 
-function Field({ id, label, ...rest }: { id: string; label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+function Rule({ label }: { label: string }) {
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      <Input id={id} {...rest} />
+    <div className="flex items-center gap-2 rounded-md border border-border bg-card/40 px-3 py-2 text-sm">
+      <ShieldCheck className="h-3.5 w-3.5 text-success" />
+      <span>{label}</span>
     </div>
   );
 }
