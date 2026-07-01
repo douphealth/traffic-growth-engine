@@ -159,6 +159,7 @@ async function autoCreateAndLinkSites(
     .from("sites")
     .select("id, base_url, gsc_property, canonical_host")
     .eq("org_id", orgId);
+  const siteCache = [...((existingSites ?? []) as Array<{ id: string; base_url: string; gsc_property: string | null; canonical_host?: string | null }>)];
 
   let created = 0;
   let linked = 0;
@@ -169,12 +170,12 @@ async function autoCreateAndLinkSites(
     const identity = siteIdentityFromProperty(prop.site_url);
     if (!identity) continue;
 
-    let siteId = ((existingSites ?? []) as Array<{ id: string; base_url: string; gsc_property: string | null; canonical_host?: string | null }>).find(
+    let siteId = siteCache.find(
       (site) => site.gsc_property === prop.site_url,
     )?.id;
 
     if (!siteId) {
-      const reusable = ((existingSites ?? []) as Array<{ id: string; base_url: string; gsc_property: string | null; canonical_host?: string | null }>).find(
+      const reusable = siteCache.find(
         (site) => (site.canonical_host ?? canonicalHostFromProperty(site.base_url)) === identity.canonicalHost,
       );
       siteId = reusable?.id;
@@ -190,6 +191,11 @@ async function autoCreateAndLinkSites(
           } as never)
           .eq("id", siteId);
         if (updateErr) throw new Error(updateErr.message);
+        const cached = siteCache.find((site) => site.id === siteId);
+        if (cached) {
+          cached.gsc_property = prop.site_url.startsWith("sc-domain:") ? prop.site_url : cached.gsc_property ?? prop.site_url;
+          cached.canonical_host = identity.canonicalHost;
+        }
       }
     }
 
@@ -209,6 +215,7 @@ async function autoCreateAndLinkSites(
         .single();
       if (insertErr || !inserted) throw new Error(insertErr?.message ?? "Unable to create site");
       siteId = (inserted as { id: string }).id;
+      siteCache.push({ id: siteId, base_url: identity.baseUrl, gsc_property: prop.site_url, canonical_host: identity.canonicalHost });
       created++;
     }
 
