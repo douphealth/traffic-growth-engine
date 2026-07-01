@@ -420,11 +420,21 @@ export const connectGscPropertyToSite = createServerFn({ method: "POST" })
     if (site.org_id !== prop.org_id) throw new Error("Site and property are in different workspaces");
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { count: siteMappings } = await supabaseAdmin
+      .from("site_gsc_connections")
+      .select("id", { count: "exact", head: true })
+      .eq("site_id", site.id);
+
     const { error: upErr } = await supabaseAdmin
       .from("site_gsc_connections")
       .upsert(
-        { site_id: site.id, gsc_property_id: prop.id, connected_at: new Date().toISOString() } as never,
-        { onConflict: "site_id" },
+        {
+          site_id: site.id,
+          gsc_property_id: prop.id,
+          connected_at: new Date().toISOString(),
+          is_primary: (siteMappings ?? 0) === 0,
+        } as never,
+        { onConflict: "gsc_property_id" },
       );
     if (upErr) throw new Error(upErr.message);
 
