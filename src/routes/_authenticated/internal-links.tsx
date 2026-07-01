@@ -16,15 +16,18 @@ export const Route = createFileRoute("/_authenticated/internal-links")({
 
 function InternalLinksPage() {
   const qc = useQueryClient();
+  const { siteId } = useSiteScope();
   const q = useQuery({
-    queryKey: ["link-opportunities"],
+    queryKey: ["link-opportunities", siteId ?? "all"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let req = supabase
         .from("link_opportunities")
         .select("id, source_url, target_url, suggested_anchor, similarity, status")
         .eq("status", "open")
         .order("similarity", { ascending: false })
         .limit(200);
+      if (siteId) req = req.eq("site_id", siteId);
+      const { data, error } = await req;
       if (error) throw error;
       return data ?? [];
     },
