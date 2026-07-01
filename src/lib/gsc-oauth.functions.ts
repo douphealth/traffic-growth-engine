@@ -577,6 +577,11 @@ export const autoLinkGscProperties = createServerFn({ method: "POST" })
         created++;
       }
 
+      const { count: siteMappings } = await supabaseAdmin
+        .from("site_gsc_connections")
+        .select("id", { count: "exact", head: true })
+        .eq("site_id", siteId);
+
       const { error: mapErr } = await supabaseAdmin
         .from("site_gsc_connections")
         .upsert(
@@ -584,8 +589,9 @@ export const autoLinkGscProperties = createServerFn({ method: "POST" })
             site_id: siteId,
             gsc_property_id: p.id,
             connected_at: new Date().toISOString(),
+            is_primary: (siteMappings ?? 0) === 0 || p.site_url.startsWith("sc-domain:"),
           } as never,
-          { onConflict: "site_id" },
+          { onConflict: "gsc_property_id" },
         );
       if (mapErr) throw new Error(mapErr.message);
 
