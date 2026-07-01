@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { getPipelineHealth } from "@/lib/quality.functions";
 import { PipelineActions } from "@/components/ops-workspace";
+import { useSiteScope } from "@/hooks/use-site-scope";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: DashboardPage,
