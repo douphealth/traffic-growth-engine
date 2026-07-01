@@ -189,8 +189,9 @@ export function OpportunityQueue({
   emptyDescription?: string;
   limit?: number;
 }) {
+  const { siteId } = useSiteScope();
   const q = useQuery({
-    queryKey: ["ops-opportunity-queue", types?.join("|") ?? "all", limit],
+    queryKey: ["ops-opportunity-queue", types?.join("|") ?? "all", limit, siteId ?? "all"],
     queryFn: async () => {
       let req = supabase
         .from("opportunities")
@@ -199,6 +200,7 @@ export function OpportunityQueue({
         .order("priority", { ascending: false })
         .limit(limit);
       if (types?.length) req = req.in("type", types as never);
+      if (siteId) req = req.eq("site_id", siteId);
       const { data, error } = await req;
       if (error) throw error;
       return (data ?? []) as unknown as OpsOpportunity[];
