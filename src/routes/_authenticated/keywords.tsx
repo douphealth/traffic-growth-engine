@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { PipelineActions, PipelineCommandCenter } from "@/components/ops-workspace";
 import { ArrowRight } from "lucide-react";
+import { useSiteScope } from "@/hooks/use-site-scope";
 
 export const Route = createFileRoute("/_authenticated/keywords")({
   component: KeywordsPage,
