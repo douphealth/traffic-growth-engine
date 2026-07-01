@@ -1813,32 +1813,35 @@ export type Database = {
           connected_at: string
           gsc_property_id: string
           id: string
+          is_primary: boolean
           site_id: string
         }
         Insert: {
           connected_at?: string
           gsc_property_id: string
           id?: string
+          is_primary?: boolean
           site_id: string
         }
         Update: {
           connected_at?: string
           gsc_property_id?: string
           id?: string
+          is_primary?: boolean
           site_id?: string
         }
         Relationships: [
           {
             foreignKeyName: "site_gsc_connections_gsc_property_id_fkey"
             columns: ["gsc_property_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "gsc_properties"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "site_gsc_connections_site_id_fkey"
             columns: ["site_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "sites"
             referencedColumns: ["id"]
           },
