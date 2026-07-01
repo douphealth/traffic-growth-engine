@@ -16,23 +16,25 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 function DashboardPage() {
+  const { siteId, currentSite } = useSiteScope();
   const healthQ = useQuery({
     queryKey: ["pipeline-health"],
     queryFn: () => getPipelineHealth(),
   });
 
   const kpis = useQuery({
-    queryKey: ["dashboard-kpis"],
+    queryKey: ["dashboard-kpis", siteId ?? "all"],
     queryFn: async () => {
+      const withSite = <T extends { eq: (c: string, v: string) => T }>(q: T) => (siteId ? q.eq("site_id", siteId) : q);
       const [sites, pages, opps, vRuns, jobs] = await Promise.all([
         supabase.from("sites").select("id", { count: "exact", head: true }),
-        supabase.from("pages").select("id", { count: "exact", head: true }),
-        supabase.from("opportunities").select("id", { count: "exact", head: true }).eq("status", "open"),
-        supabase.from("validation_runs").select("id", { count: "exact", head: true }).eq("passed", false),
-        supabase.from("publish_jobs").select("id", { count: "exact", head: true }).eq("status", "succeeded"),
+        withSite(supabase.from("pages").select("id", { count: "exact", head: true })),
+        withSite(supabase.from("opportunities").select("id", { count: "exact", head: true })).eq("status", "open"),
+        withSite(supabase.from("validation_runs").select("id", { count: "exact", head: true })).eq("passed", false),
+        withSite(supabase.from("publish_jobs").select("id", { count: "exact", head: true })).eq("status", "succeeded"),
       ]);
       return {
-        sites: sites.count ?? 0,
+        sites: siteId ? 1 : sites.count ?? 0,
         pages: pages.count ?? 0,
         oppsOpen: opps.count ?? 0,
         validationsFailed: vRuns.count ?? 0,
@@ -42,14 +44,16 @@ function DashboardPage() {
   });
 
   const topOpps = useQuery({
-    queryKey: ["dashboard-top-opps"],
+    queryKey: ["dashboard-top-opps", siteId ?? "all"],
     queryFn: async () => {
-      const { data } = await supabase
+      let q = supabase
         .from("opportunities")
         .select("id, type, title, priority, page:pages(url), site:sites(name)")
         .eq("status", "open")
         .order("priority", { ascending: false })
         .limit(6);
+      if (siteId) q = q.eq("site_id", siteId);
+      const { data } = await q;
       return (data ?? []) as Array<{
         id: string;
         type: string;
@@ -62,19 +66,39 @@ function DashboardPage() {
   });
 
   const activity = useQuery({
-    queryKey: ["dashboard-activity"],
+    queryKey: ["dashboard-activity", siteId ?? "all"],
     queryFn: async () => {
-      const { data } = await supabase
+      let q = supabase
         .from("audit_logs")
         .select("id, action, created_at, after")
         .order("created_at", { ascending: false })
         .limit(8);
+      if (siteId) q = q.eq("site_id", siteId);
+      const { data } = await q;
       return data ?? [];
     },
   });
 
-  const hasAnyData = (healthQ.data?.totals.sites ?? kpis.data?.sites ?? 0) > 0;
-  const needsAttention = healthQ.data?.sites.filter((s) => s.status !== "ready") ?? [];
+  const scopedHealthSites = healthQ.data ? (siteId ? healthQ.data.sites.filter((s) => s.canonical_site_id === siteId) : healthQ.data.sites) : [];
+  const scopedTotals = healthQ.data
+    ? siteId
+      ? scopedHealthSites.reduce(
+          (acc, s) => ({
+            sites: 1,
+            pages: acc.pages + s.pages,
+            gsc_urls: acc.gsc_urls + (s as unknown as { gsc_urls?: number }).gsc_urls ?? 0,
+            gsc_rows: acc.gsc_rows + s.gsc_rows,
+            opportunities: acc.opportunities + s.opportunities,
+            average_quality: s.quality_score,
+          }),
+          { sites: 0, pages: 0, gsc_urls: 0, gsc_rows: 0, opportunities: 0, average_quality: 0 },
+        )
+      : healthQ.data.totals
+    : null;
+  const hasAnyData = (scopedTotals?.sites ?? kpis.data?.sites ?? 0) > 0;
+  const needsAttention = scopedHealthSites.filter((s) => s.status !== "ready");
+  void currentSite;
+
 
   return (
     <>
