@@ -12,14 +12,17 @@ export const Route = createFileRoute("/_authenticated/experiments")({
 });
 
 function ExperimentsPage() {
+  const { siteId } = useSiteScope();
   const q = useQuery({
-    queryKey: ["experiments"],
+    queryKey: ["experiments", siteId ?? "all"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let req = supabase
         .from("experiments")
         .select("id, hypothesis, status, current_result, implementation_date, pages(url)")
         .order("created_at", { ascending: false })
         .limit(200);
+      if (siteId) req = req.eq("site_id", siteId);
+      const { data, error } = await req;
       if (error) throw error;
       return data ?? [];
     },
