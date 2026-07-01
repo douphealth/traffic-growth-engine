@@ -147,31 +147,32 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-background">
-        <AppSidebar />
-        <div className="flex flex-1 flex-col min-w-0">
-          <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger />
-              <div className="hidden sm:block text-sm text-muted-foreground">
-                <span className="text-foreground font-medium">AutoTraffic AI</span>
-                <span className="mx-2">·</span>
-                <span>Growth OS</span>
+      <SiteScopeProvider>
+        <div className="flex min-h-screen w-full bg-background">
+          <AppSidebar />
+          <div className="flex flex-1 flex-col min-w-0">
+            <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
+              <div className="flex items-center gap-2 min-w-0">
+                <SidebarTrigger />
+                <div className="hidden sm:block text-sm text-muted-foreground">
+                  <span className="text-foreground font-medium">AutoTraffic AI</span>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="hidden md:inline text-xs text-muted-foreground">
-                {user?.email}
-              </span>
-              <Button variant="ghost" size="sm" onClick={signOut} className="gap-1.5">
-                <LogOut className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Sign out</span>
-              </Button>
-            </div>
-          </header>
-          <main className="flex-1 min-w-0">{children}</main>
+              <div className="flex items-center gap-2">
+                <SiteScopeSelector />
+                <span className="hidden lg:inline text-xs text-muted-foreground">
+                  {user?.email}
+                </span>
+                <Button variant="ghost" size="sm" onClick={signOut} className="gap-1.5">
+                  <LogOut className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Sign out</span>
+                </Button>
+              </div>
+            </header>
+            <main className="flex-1 min-w-0">{children}</main>
+          </div>
         </div>
-      </div>
+      </SiteScopeProvider>
     </SidebarProvider>
   );
 }
