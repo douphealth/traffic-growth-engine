@@ -102,6 +102,7 @@ export const importGscData = createServerFn({ method: "POST" })
       .select("gsc_property_id, is_primary, gsc_properties:gsc_property_id (site_url, connection_id)")
       .eq("site_id", site.id)
       .order("is_primary", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     const mapped = mapping as
