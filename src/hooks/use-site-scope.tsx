@@ -96,21 +96,26 @@ export function SiteScopeSelector({ className }: { className?: string }) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
-          variant="outline"
+          variant={siteId ? "default" : "outline"}
           size="sm"
-          className={cn("h-9 min-w-[220px] justify-between gap-2", className)}
+          className={cn(
+            "h-9 min-w-[260px] justify-between gap-2 border-primary/40",
+            siteId ? "" : "ring-2 ring-primary/40 animate-pulse",
+            className,
+          )}
           disabled={loading}
         >
           <span className="flex items-center gap-2 min-w-0">
-            <Globe className="h-3.5 w-3.5 shrink-0 text-primary" />
-            <span className="truncate text-left">
-              {currentSite ? currentSite.name : "All sites"}
+            <Globe className="h-3.5 w-3.5 shrink-0" />
+            <span className="flex flex-col items-start leading-tight min-w-0">
+              <span className="text-[9px] uppercase tracking-wider opacity-70">Focused site</span>
+              <span className="truncate text-left text-xs font-semibold max-w-[200px]">
+                {currentSite ? currentSite.name : `All sites — pick one to focus`}
+              </span>
             </span>
           </span>
           <div className="flex items-center gap-1.5">
-            {!siteId && sites.length > 0 && (
-              <Badge variant="secondary" className="text-[10px]">{sites.length}</Badge>
-            )}
+            <Badge variant="secondary" className="text-[10px]">{sites.length}</Badge>
             <ChevronsUpDown className="h-3.5 w-3.5 opacity-60" />
           </div>
         </Button>
