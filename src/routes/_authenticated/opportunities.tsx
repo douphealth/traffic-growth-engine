@@ -58,12 +58,18 @@ type OppRow = {
 
 function OpportunityBoard() {
   const qc = useQueryClient();
+  const { siteId: scopeSiteId } = useSiteScope();
   const [type, setType] = useState("all");
-  const [siteId, setSiteId] = useState("all");
+  const [siteId, setSiteId] = useState<string>(scopeSiteId ?? "all");
   const [risk, setRisk] = useState("all");
   const [confidence, setConfidence] = useState("all");
   const [status, setStatus] = useState("open");
   const [q, setQ] = useState("");
+
+  // Sync local filter with global scope changes
+  useEffect(() => {
+    setSiteId(scopeSiteId ?? "all");
+  }, [scopeSiteId]);
 
   const sitesQ = useQuery({
     queryKey: ["sites-mini"],
