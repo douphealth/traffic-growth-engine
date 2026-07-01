@@ -118,9 +118,9 @@ export function PipelineActions({ scope = "full" }: { scope?: "full" | "compact"
 }
 
 export function PipelineCommandCenter({ focus }: { focus?: string }) {
+  const { siteId, currentSite } = useSiteScope();
   const healthQ = useQuery({ queryKey: ["pipeline-health"], queryFn: () => getPipelineHealth() });
   const health = healthQ.data;
-  const worst = health?.sites.find((site) => site.status !== "ready");
 
   if (healthQ.isLoading) return <p className="text-sm text-muted-foreground">Loading pipeline health…</p>;
 
@@ -138,6 +138,21 @@ export function PipelineCommandCenter({ focus }: { focus?: string }) {
     );
   }
 
+  const scopedSites = siteId ? health.sites.filter((s) => s.canonical_site_id === siteId) : health.sites;
+  const totals = siteId
+    ? scopedSites.reduce(
+        (acc, s) => ({
+          sites: 1,
+          gsc_rows: acc.gsc_rows + s.gsc_rows,
+          pages: acc.pages + s.pages,
+          opportunities: acc.opportunities + s.opportunities,
+          average_quality: s.quality_score,
+        }),
+        { sites: 0, gsc_rows: 0, pages: 0, opportunities: 0, average_quality: 0 },
+      )
+    : health.totals;
+  const worst = scopedSites.find((s) => s.status !== "ready");
+
   return (
     <Card className={worst ? "border-warning/40" : "border-success/30"}>
       <CardHeader className="pb-3">
@@ -145,7 +160,9 @@ export function PipelineCommandCenter({ focus }: { focus?: string }) {
           <div>
             <div className="flex items-center gap-2">
               {worst ? <ShieldAlert className="h-4 w-4 text-warning" /> : <CheckCircle2 className="h-4 w-4 text-success" />}
-              <CardTitle className="text-base">Operational command center</CardTitle>
+              <CardTitle className="text-base">
+                {currentSite ? `${currentSite.name} · command center` : "Operational command center"}
+              </CardTitle>
             </div>
             <CardDescription className="mt-1">
               {focus ?? "Run the real-data pipeline before reviewing recommendations."}
@@ -158,16 +175,16 @@ export function PipelineCommandCenter({ focus }: { focus?: string }) {
         <div className="rounded-md border border-border bg-muted/20 p-3">
           <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Data quality</div>
           <div className="mt-1 flex items-end gap-2">
-            <span className="text-3xl font-semibold tabular-nums">{health.totals.average_quality}</span>
+            <span className="text-3xl font-semibold tabular-nums">{totals.average_quality}</span>
             <span className="pb-1 text-xs text-muted-foreground">/100</span>
           </div>
-          <Progress value={health.totals.average_quality} className="mt-2 h-1.5" />
+          <Progress value={totals.average_quality} className="mt-2 h-1.5" />
         </div>
         <div className="grid gap-2 sm:grid-cols-4">
-          <Metric label="Sites" value={health.totals.sites} />
-          <Metric label="GSC rows" value={health.totals.gsc_rows} />
-          <Metric label="Pages" value={health.totals.pages} />
-          <Metric label="Open actions" value={health.totals.opportunities} tone="warning" />
+          <Metric label={siteId ? "Site" : "Sites"} value={totals.sites} />
+          <Metric label="GSC rows" value={totals.gsc_rows} />
+          <Metric label="Pages" value={totals.pages} />
+          <Metric label="Open actions" value={totals.opportunities} tone="warning" />
         </div>
         {worst?.issues[0] && (
           <p className="md:col-span-2 text-xs text-muted-foreground">
