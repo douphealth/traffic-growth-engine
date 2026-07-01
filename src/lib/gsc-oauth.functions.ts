@@ -38,25 +38,44 @@ async function callGscGateway(path: string, init?: RequestInit): Promise<Respons
   return res;
 }
 
-function siteIdentityFromProperty(siteUrl: string): { host: string; baseUrl: string; name: string } | null {
+function canonicalHostFromProperty(siteUrl: string): string {
+  const identity = siteIdentityFromProperty(siteUrl);
+  return (identity?.host ?? siteUrl)
+    .replace(/^https?:\/\//, "")
+    .replace(/^sc-domain:/, "")
+    .replace(/^www\./, "")
+    .replace(/\/$/, "")
+    .toLowerCase();
+}
+
+function siteIdentityFromProperty(siteUrl: string): { host: string; baseUrl: string; name: string; canonicalHost: string } | null {
   if (siteUrl.startsWith("sc-domain:")) {
-    const host = siteUrl.slice("sc-domain:".length).trim().replace(/^\*\./, "");
+    const host = siteUrl.slice("sc-domain:".length).trim().replace(/^\*\./, "").replace(/^www\./, "").toLowerCase();
     if (!host) return null;
-    return { host, baseUrl: `https://${host}`, name: host };
+    return { host, baseUrl: `https://${host}`, name: host, canonicalHost: host };
   }
 
   try {
     const u = new URL(siteUrl);
     const pathSuffix = u.pathname && u.pathname !== "/" ? u.pathname.replace(/\/$/, "") : "";
+    const host = u.hostname.replace(/^www\./, "").toLowerCase();
     return {
-      host: u.hostname,
-      baseUrl: `${u.protocol}//${u.host}${pathSuffix}`,
-      name: pathSuffix ? `${u.hostname}${pathSuffix}` : u.hostname,
+      host,
+      baseUrl: `${u.protocol}//${host}${pathSuffix}`,
+      name: pathSuffix ? `${host}${pathSuffix}` : host,
+      canonicalHost: pathSuffix ? `${host}${pathSuffix}` : host,
     };
   } catch {
     const cleaned = siteUrl.trim();
-    return cleaned ? { host: cleaned, baseUrl: cleaned, name: cleaned } : null;
+    const canonicalHost = cleaned.replace(/^www\./, "").toLowerCase();
+    return cleaned ? { host: canonicalHost, baseUrl: cleaned, name: canonicalHost, canonicalHost } : null;
   }
+}
+
+function choosePrimaryProperty(properties: GscPropertyRow[], siteId: string, propertyId: string, siteUrl: string) {
+  const variants = properties.filter((p) => canonicalHostFromProperty(p.site_url) === canonicalHostFromProperty(siteUrl));
+  const preferred = variants.find((p) => p.site_url.startsWith("sc-domain:")) ?? variants[0];
+  return preferred?.id === propertyId;
 }
 
 async function getFirstOrgForUser(supabase: any, userId: string) {
