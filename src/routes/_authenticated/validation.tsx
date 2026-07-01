@@ -20,7 +20,7 @@ function ValidationPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("validation_runs")
-        .select("id, passed, checks, blocking_failures, warnings, ran_at, content_diffs(id, proposed_title, status, pages(url))")
+        .select("id, passed, checks, blocking_failures, warnings, ran_at, content_diffs(id, proposed_title, status, site_id, page_id, pages(url))")
         .order("ran_at", { ascending: false })
         .limit(100);
       if (error) throw error;
@@ -29,13 +29,28 @@ function ValidationPage() {
   });
 
   const setDiffStatus = useMutation({
-    mutationFn: async ({ diffId, status }: { diffId: string; status: "approved" | "rejected" }) => {
+    mutationFn: async ({ diffId, status, siteId, pageId }: { diffId: string; status: "approved" | "rejected"; siteId?: string | null; pageId?: string | null }) => {
       const { data: userData } = await supabase.auth.getUser();
       const patch = status === "approved"
         ? { status, approved_at: new Date().toISOString(), approved_by: userData.user?.id ?? null }
         : { status };
       const { error } = await supabase.from("content_diffs").update(patch).eq("id", diffId);
       if (error) throw error;
+      if (status === "approved" && siteId) {
+        const existing = await supabase.from("publish_jobs").select("id").eq("diff_id", diffId).maybeSingle();
+        if (existing.error) throw existing.error;
+        if (!existing.data?.id) {
+          const { error: jobError } = await supabase.from("publish_jobs").insert({
+            site_id: siteId,
+            diff_id: diffId,
+            page_id: pageId ?? null,
+            mode: "draft",
+            status: "queued",
+            requested_by: userData.user?.id ?? null,
+          });
+          if (jobError) throw jobError;
+        }
+      }
       return status;
     },
     onSuccess: (status) => {
@@ -118,7 +133,7 @@ function ValidationPage() {
                   </Button>
                 )}
                 {diff?.id && d.passed && diff.status !== "approved" && diff.status !== "published" && (
-                  <Button size="sm" onClick={() => setDiffStatus.mutate({ diffId: diff.id, status: "approved" })} disabled={setDiffStatus.isPending}>
+                  <Button size="sm" onClick={() => setDiffStatus.mutate({ diffId: diff.id, status: "approved", siteId: diff.site_id, pageId: diff.page_id })} disabled={setDiffStatus.isPending}>
                     {setDiffStatus.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
                     Approve for publishing
                   </Button>
