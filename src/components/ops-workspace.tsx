@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { importAllConnectedGscProperties } from "@/lib/gsc-pages.functions";
 import { scoreOpportunities } from "@/lib/opportunities.functions";
 import { getPipelineHealth } from "@/lib/quality.functions";
+import { useSiteScope } from "@/hooks/use-site-scope";
 
 export const OPPORTUNITY_LABEL: Record<string, string> = {
   ctr_leak: "CTR leak",
