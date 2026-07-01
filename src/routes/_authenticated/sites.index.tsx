@@ -4,7 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/page-header";
-import { Plus, ExternalLink, Download, MapPin, BarChart3, Loader2, Target, RefreshCw, Search } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Plus, ExternalLink, Download, MapPin, BarChart3, Loader2, Target, RefreshCw, Search, ShieldAlert, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -14,6 +15,7 @@ import { crawlSitemap } from "@/lib/sitemap.functions";
 import { importGscData } from "@/lib/gsc.functions";
 import { scoreOpportunities } from "@/lib/opportunities.functions";
 import { testWordpressConnection } from "@/lib/sites.functions";
+import { getPipelineHealth, type SitePipelineHealth } from "@/lib/quality.functions";
 
 export const Route = createFileRoute("/_authenticated/sites/")({
   component: SitesPage,
@@ -42,6 +44,11 @@ function SitesPage() {
       if (error) throw error;
       return (data ?? []) as SiteRow[];
     },
+  });
+
+  const healthQ = useQuery({
+    queryKey: ["pipeline-health"],
+    queryFn: () => getPipelineHealth(),
   });
 
   return (
@@ -75,7 +82,15 @@ function SitesPage() {
         )}
         <div className="grid gap-4 md:grid-cols-2">
           {sitesQ.data?.map((s) => (
-            <SiteCard key={s.id} site={s} onChanged={() => qc.invalidateQueries({ queryKey: ["sites"] })} />
+            <SiteCard
+              key={s.id}
+              site={s}
+              health={healthQ.data?.sites.find((h) => h.site_ids.includes(s.id) || h.canonical_site_id === s.id)}
+              onChanged={() => {
+                qc.invalidateQueries({ queryKey: ["sites"] });
+                qc.invalidateQueries({ queryKey: ["pipeline-health"] });
+              }}
+            />
           ))}
         </div>
       </PageBody>
@@ -83,7 +98,7 @@ function SitesPage() {
   );
 }
 
-function SiteCard({ site, onChanged }: { site: SiteRow; onChanged: () => void }) {
+function SiteCard({ site, health, onChanged }: { site: SiteRow; health?: SitePipelineHealth; onChanged: () => void }) {
   const qc = useQueryClient();
   const stats = useQuery({
     queryKey: ["site-stats", site.id],
@@ -154,6 +169,24 @@ function SiteCard({ site, onChanged }: { site: SiteRow; onChanged: () => void })
           <Stat label="GSC rows" value={stats.data?.gscRows.toLocaleString() ?? "—"} />
           <Stat label="Open opportunities" value={stats.data?.oppsOpen.toString() ?? "—"} />
         </div>
+        {health && (
+          <div className="rounded-lg border border-border bg-muted/20 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs font-medium">
+                {health.status === "ready" ? <CheckCircle2 className="h-3.5 w-3.5 text-success" /> : <ShieldAlert className="h-3.5 w-3.5 text-warning" />}
+                Data quality
+              </div>
+              <span className="text-sm font-semibold tabular-nums">{health.quality_score}/100</span>
+            </div>
+            <Progress value={health.quality_score} className="mt-2 h-1.5" />
+            <div className="mt-2 flex flex-wrap gap-1">
+              <Badge variant="outline" className="text-[10px]">{health.property_variants.length} GSC propert{health.property_variants.length === 1 ? "y" : "ies"}</Badge>
+              <Badge variant="outline" className="text-[10px]">{health.gsc_urls.toLocaleString()} URLs</Badge>
+              <Badge variant="outline" className="text-[10px]">{health.gsc_rows.toLocaleString()} rows</Badge>
+            </div>
+            {health.issues.length > 0 && <p className="mt-2 text-xs text-muted-foreground">{health.issues[0]}</p>}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2 border-t border-border pt-3">
           <Button variant="outline" size="sm" disabled={testConn.isPending} onClick={() => testConn.mutate()}>
             <RefreshCw className={`mr-1 h-3 w-3 ${testConn.isPending ? "animate-spin" : ""}`} /> Test WP
